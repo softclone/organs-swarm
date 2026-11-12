@@ -1,0 +1,213 @@
+# Cadence audit v3 (gnomon #4271 law, 2026-11-09; v3 = clean-room audit cure 2026-11-11, deleg_366768ad child C):
+# B1 LIVE cure: weekly-by-day-of-week cron detection (parts[4] != '*' -> 604800 BEFORE the daily check;
+#   'every tuesday 6am' at iv=86400 was firing false MISS ~4 days/week on truncation-sweep-weekly-SCRIPT).
+# Exit discipline cures: defects exit non-zero (was exit-0-always); clean night prints NOTHING
+#   (counter/phase legs were chatty every 4h: their unconditional prints violated the empty-stdout quiet law).
+# Dead-code cure: hourly exprs ('0 * * * *', '*/7 * * * *') int() crash before the '*' check (blind hourly path).
+# Shape/reader cures: dict/list job tolerance (.values() for dicts), non-numeric job_id coercion,
+#   guarded load with bounded retry (a reader defect must never alert as a bell defect).
+# Clock cure: naive timestamps are LOCALIZED at the profile's zone (-06:00), not assumed UTC (naive-UTC
+#   assumption skewed gaps +6h -> false misses <2h intervals). tz-aware inputs unchanged.
+# Miss = observed gap > threshold x declared interval for a job that is enabled+scheduled (env lever GP848).
+import json, time, datetime, re, os
+import os as _os, json as _json
+def _jobs_path():
+    if _os.environ.get("ORGANS_JOBS"): return _os.environ["ORGANS_JOBS"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try:
+            v = _json.load(open(_p, encoding="utf-8")).get("jobs")
+            if v: return v
+        except Exception: pass
+    hh = _os.environ.get("HERMES_HOME")
+    if hh: return _os.path.join(hh, "cron", "jobs.json")
+    return _os.path.expanduser("~/.hermes/cron/jobs.json")
+JOBS = _jobs_path()
+
+NAIVE_TZ = datetime.timezone(datetime.timedelta(hours=int(os.environ.get("ORGANS_TZ_OFFSET", "-6"))))  # profile local zone; shim ORGANS_TZ_OFFSET (default -6 CST, disclosed)
+
+def load_jobs():
+    for tries in range(3):
+        try:
+            jobs = json.load(open(JOBS, encoding="utf-8"))
+            jl = jobs.get("jobs", jobs) if isinstance(jobs, dict) else jobs
+            if isinstance(jl, dict):
+                jl = list(jl.values())
+            return [j for j in jl if isinstance(j, dict)]
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            time.sleep(2)  # transient cron-write race: bounded retry
+    # reader defect: disclosed quietly -- a READER defect must never fire the keeper's bell alert
+    print("CADENCE-READER: jobs.json unreadable after 3 tries (reader defect, not a bell defect)")
+    raise SystemExit(0)
+
+def _home_dir():
+    if os.environ.get("ORGANS_HOME"): return os.environ["ORGANS_HOME"]
+    for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"),
+               os.path.expanduser("~/organs.json")):
+        try:
+            v = json.load(open(_q, encoding="utf-8")).get("home")
+            if v: return v
+        except Exception: pass
+    return os.path.expanduser("~/shop")
+jl = load_jobs()
+now = datetime.datetime.now(datetime.timezone.utc)
+
+def parse(t):
+    if not t: return None
+    try:
+        dt = datetime.datetime.fromisoformat(t)
+    except ValueError:
+        return None
+    if dt.tzinfo: return dt.astimezone(datetime.timezone.utc)
+    return dt.replace(tzinfo=NAIVE_TZ)  # naive = profile local, disclosed; NEVER assume UTC
+
+def interval_sec(sched):
+    d = (sched.get("display") or "").lower()
+    m = re.search(r"every (\d+)([mh])", d)
+    if m: return int(m.group(1)) * (3600 if m.group(2) == "h" else 60)
+    if "weekly" in d: return 604800
+    for wd in ("monday","tuesday","wednesday","thursday","friday","saturday","sunday"):
+        if "every " + wd in d: return 604800
+    e = sched.get("expr") or ""
+    if e:
+        parts = e.split()
+        if len(parts) == 5:
+            try:
+                if parts[4] != "*" and parts[2] == "*" and parts[3] == "*":
+                    return 604800  # weekly-by-dow FIRST (B1 cure)
+                if parts[1] == "*" and parts[2] == "*" and parts[3] == "*" and parts[4] == "*":
+                    ms = parts[0]
+                    if ms.startswith("*/"):
+                        return max(int(ms[2:]), 1) * 60
+                    if ms.isdigit():
+                        return 3600  # hourly BEFORE int-conversion (dead-code cure)
+                    return None  # minute-list forms not scored
+                if parts[2] == "*" and parts[3] == "*" and parts[4] == "*" and parts[1].isdigit() and parts[0].isdigit():
+                    return 86400
+            except ValueError:
+                pass
+    if "every day" in d: return 86400
+    return None
+
+defects = []
+misses = []; seen = 0
+thr = 3
+try:
+    thr = float(os.environ.get("CADENCE_THRESHOLD", 3))
+except ValueError:
+    pass
+for j in jl:
+    lr = parse(j.get("last_run_at")); nx = parse(j.get("next_run_at"))
+    if not j.get("enabled") or j.get("state") not in ("scheduled",): continue
+    s = j.get("schedule") if isinstance(j.get("schedule"), dict) else {}
+    iv = interval_sec(s); disp = s.get("display", "")
+    if iv: seen += 1
+    if iv and lr and (now - lr).total_seconds() > thr * iv:
+        misses.append((str(j.get("name")), disp, round((now - lr).total_seconds() / 3600, 1)))
+    if lr is None and nx and nx <= now:
+        misses.append((str(j.get("name")), disp, "never-fired past-due"))
+
+if misses:
+    print("CADENCE AUDIT fired at", now.isoformat()[:19], "Z (machine clock)")
+    print("recurring jobs checked:", seen, "| cadence misses (>%.1fx declared interval):" % thr, len(misses))
+    for mm in misses: print(" MISS:", mm)
+    print("AUDIT: a bell dropped its cadence — wake the shop.")
+
+# C5-1997 counter chain-break leg -- ADVISORY; prints ONLY on real breaks/dups (quiet cure)
+counter_miss = False
+try:
+    _lp = os.environ.get("ORGANS_LEDGER")
+    if not _lp:
+        for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"), os.path.expanduser("~/organs.json")):
+            try:
+                _lp = json.load(open(_q, encoding="utf-8")).get("ledger")
+                if _lp: break
+            except Exception: pass
+    _d = open(_lp or os.path.expanduser("~/shop/ledgers/CORPUS.md"), encoding="utf-8").read()
+    _rows = re.findall(r"\| C5-(\d+) ", _d)
+    _pairs = [tuple(map(int, x)) for x in re.findall(r"[Cc]ounter\s+(\d{4,5})->(\d{4,5})", _d) if 5000 < int(x[1]) < 10000]
+    _breaks = sum(1 for a, b in zip(_pairs, _pairs[1:]) if a[1] != b[0])
+    _dups = sorted({n for n in _rows if _rows.count(n) > 2})  # 2026-11-11 rebalance: label pairs = booked collision class (register-policed, append-only); counts >2 = serial-gate breach
+    if _breaks > 80:
+        # 2026-11-11 alarm-hygiene cure (self-contradiction caught on its own print: the row says
+        # 'advisory drift bound; canonical number remains the re-count' and the OLD exit fired on it
+        # -- computed YELLOW wearing a RED exit, the #202 family worn by the alarm rig itself):
+        # advisory drift PRINTS, never fires the keeper alert. Multi-lane counters legitimately diverge;
+        # the recount (counter_head rig) is the canonical instrument.
+        print("COUNTER-CHAIN ADVISORY: rows=%d pairs=%d breaks=%d dup_labels=%s (advisory drift bound; canonical number remains the re-count)" % (len(_rows), len(_pairs), _breaks, _dups))
+    if _dups:
+        counter_miss = True
+        print("COUNTER-CHAIN DUP LABELS:", _dups[:12])
+except Exception as _e:
+    print("counter leg: reader artifact:", type(_e).__name__)
+
+# phase leg -- prints ONLY on real phase misses (quiet cure)
+phase_miss = False
+try:
+    import statistics as _st
+    _seen = {}
+    try:
+        for _l in open(os.environ.get("ORGANS_BELL_FIRINGS") or os.path.join(_home_dir(), "data", "bell-firings.jsonl"), encoding="utf-8"):
+            _r = json.loads(_l)
+            if _r.get("last_run"):
+                _seen.setdefault(_r["job"], set()).add(_r["last_run"])
+    except FileNotFoundError:
+        pass
+    _res_lines = []
+    for _j in jl:
+        if not _j.get("enabled"): continue
+        _iv = interval_sec(_j.get("schedule") or {})
+        _nm = str(_j.get("name") or str(_j.get("job_id", "?"))[:12])
+        _raw = sorted(_seen.get(_nm, []))[-12:]
+        _ts = [parse(x) for x in _raw]
+        _ts = [t for t in _ts if t]
+        if not _iv or len(_ts) < 3: continue
+        _rs = sorted((t.timestamp() % _iv) for t in _ts)
+        _rs = [min(r, _iv - r) for r in _rs]
+        _spread = round(max(_rs) - min(_rs), 1)
+        _med = round(_st.median(_rs), 1)
+        _res_lines.append((_nm, _iv, _med, _spread))
+    _bad = [x for x in _res_lines if x[3] > 0.45 * x[1]]  # spread >45% of period = drifting slot; rebalance 2026-11-11 (clean-room audit follow-up): the v2 bound (spread>120s & med>60s) fired on EVERY 30m/2h bell — uniform sampling of a busy machine sits near med=period/2; the phase leg reads bell-FIRING stamps (event-driven, not scheduled ticks), so it is DISCLOSORY: its verdict fires the exit only on gross slot-loss
+    # 2026-11-11 alarm-hygiene cure, second leg (same family as the counter leg): the comment always
+    # said DISCLOSORY; the code fired exit 1 on phase_miss, so a 'keeps cadence, drifting phase'
+    # morning woke the keeper. Phase drift now PRINTS only. Gross slot-loss is the 'misses' leg's
+    # object (a bell that skipped its period), and it keeps firing the alert.
+    if _bad:
+        for _n, _iv, _med, _sp in _bad[:8]:
+            print("  PHASE ADVISORY: %s period=%ss median-offset=%ss spread=%ss (keeps cadence, drifting phase)" % (_n, _iv, _med, _sp))
+except Exception as _e2:
+    print("phase leg: reader artifact:", type(_e2).__name__)
+
+# Bell census leg (2026-11-12, dream-lane autopsy C5 lane): the dream lane died for two days,
+# emitting red glyphs every 10 minutes INSIDE a cadence the scheduler counted as healthy —
+# the scheduler reads exit codes, the rig reads its own door; adjacent blind spots manufactured
+# 'lane is fine' while every fire was a refusal. No organ listed the non-green bells.
+# The daily audit now lists them. Class law: a RECURRING bell with a non-green last fire is a
+# live defect (it will refuse again on its next tick); a ONE-SHOT red is disclosed history —
+# advisory count only, never an alert (7 of the 9 reds at autopsy were obituaries).
+live_reds = []
+hist_reds = 0
+for _j in jl:
+    _st = str(_j.get("last_status") or "")
+    if _st in ("", "ok", "green", "success"):
+        continue
+    _nm = str(_j.get("name") or str(_j.get("job_id", "?"))[:12])
+    _kind = str((_j.get("schedule") or {}).get("kind") or "")
+    if _kind == "once":
+        hist_reds += 1
+    else:
+        live_reds.append((_nm, _st[:40]))
+if live_reds:
+    print("BELL CENSUS RED: %d recurring bells non-green at last fire:" % len(live_reds))
+    for _n, _s in live_reds[:12]:
+        print("  LIVE-RED:", _n, "|", _s)
+if hist_reds:
+    print("BELL CENSUS: %d one-shot reds (disclosed history, advisory)" % hist_reds)
+
+# exit discipline (cure): non-zero IFF a real defect; clean night = silent exit 0, empty stdout = no delivery
+# 2026-11-11: advisory prints (counter-chain drift bound, phase drift) do NOT fire the keeper alert;
+# real defects do: slot-loss 'misses', dup-label serial-gate breaches (catch #202 family, worn inward),
+# and (2026-11-12) recurring bells red at last fire — a lane in its dying loop is the miss family.
+if misses or counter_miss or live_reds:
+    raise SystemExit(1)
+raise SystemExit(0)

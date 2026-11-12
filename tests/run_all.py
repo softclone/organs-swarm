@@ -438,6 +438,24 @@ if LIVE:
         except Exception as e: record("live-seat-health", False, type(e).__name__)
     print("(live tests are GETs only — the suite performs zero venue writes in any mode)")
 
+
+# --- cadence census red-path tests (2026-11-12, dream-lane autopsy organ) ---
+import tempfile, subprocess
+def _cad(name, jobs_obj, want_rc, want_in, want_not=()):
+    _td = tempfile.mkdtemp()
+    _jp = os.path.join(_td, "jobs.json")
+    json.dump({"jobs": jobs_obj}, open(_jp, "w", encoding="utf-8"))
+    _env = dict(os.environ, ORGANS_JOBS=_jp, ORGANS_LEDGER=os.path.join(_td, "missing.md"),
+               ORGANS_HOME=_td, ORGANS_SECRETS=_td, ORGANS_SHOP_DIR=_td, ORGANS_LEG_DIR="none", ORGANS_TZ_OFFSET="-6")
+    _r = subprocess.run([sys.executable, os.path.join(REPO, "scripts", "cadence_audit.py")],
+                        capture_output=True, text=True, env=_env, timeout=120)
+    _out = _r.stdout + _r.stderr
+    record("cadence-" + name, _r.returncode == want_rc and all(x in _out for x in want_in) and all(x not in _out for x in want_not),
+           "rc=%d | %s" % (_r.returncode, _out[:90]))
+_cad("clean-green", [{"name": "a", "script": "", "schedule": {"kind": "interval", "minutes": 10}, "last_status": "ok"}], 0, (), ("BELL CENSUS",))
+_cad("live-red-alert", [{"name": "dream", "script": "", "schedule": {"kind": "interval", "minutes": 10}, "last_status": "error"}], 1, ("BELL CENSUS RED", "LIVE-RED: dream"))
+_cad("oneshot-red-advisory", [{"name": "old", "script": "", "schedule": {"kind": "once", "run_at": "2026-01-01T00:00:00"}, "last_status": "error"}], 0, ("one-shot reds",), ("LIVE-RED",))
+
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
 sys.exit(1 if n_fail else 0)
