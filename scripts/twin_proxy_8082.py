@@ -1,0 +1,72 @@
+import os
+HOME = os.environ.get("ORGANS_HOME", os.path.expanduser("~/shop"))
+
+# twin_proxy_8082.py — the DNS-rebinding cure, rebuilt 2026-11-07 (honcho-selfhost-ops skill, proven shape):
+# bind 127.0.0.1:8082, forward to 127.0.0.1:47831 (strata host seat, C5-16484), rewrite Host header to localhost:47831.
+# strata-family engines reject Host: host.docker.internal (403 rebinding protection); honcho points BASE_URL at host.docker.internal:8082.
+import socket, threading, re, sys
+
+LOCAL = ("127.0.0.1", 8082)
+TARGET = ("127.0.0.1", 47831)
+HOST_RE = re.compile(rb"Host: [^\r\n]*", re.IGNORECASE)
+
+def fwd(src, dst, rewrite=False):
+    # MEDIUM cure (clean-room audit child, deleg_4fe7c3ad, 2026-11-11, PROVEN): the Host rewrite ran
+    # HOST_RE.sub on EVERY chunk -- a body chunk containing 'Host: evil' got its body eaten
+    # ({"note":"Host: evil"} -> {"note":"Host: localhost:47831, JSON corruption mid-request).
+    # Rewrite ONLY the request header block (up to the first blank line); bodies pass through byte-exact.
+    # LOW cure (split headers): the header is buffered until the terminating CRLFCRLF, so 'Ho'+'st:'
+    # chunk splits are rewritten, not missed.
+    head_done = not rewrite
+    buf = b""
+    try:
+        while True:
+            b = src.recv(65536)
+            if not b:
+                break
+            if not head_done:
+                buf += b
+                i = buf.find(b"\r\n\r\n")
+                if i == -1:
+                    if len(buf) > 65536:   # runaway/unheaded stream: pass what we hold, stop rewriting
+                        dst.sendall(buf); buf = b""; head_done = True
+                    continue
+                head = HOST_RE.sub(b"Host: localhost:47831", buf[:i+4], count=1)
+                dst.sendall(head + buf[i+4:])
+                buf = b""; head_done = True
+                continue
+            dst.sendall(b)
+        if buf:
+            dst.sendall(buf)
+    except OSError:
+        pass
+    finally:
+        try: dst.shutdown(socket.SHUT_WR)
+        except OSError: pass
+
+def handle(conn):
+    try:
+        up = socket.create_connection(TARGET, timeout=60)
+        # MEDIUM cure (deleg_4fe7c3ad): create_connection's connect timeout PERSISTS on recv
+        # (proven: gettimeout()==30 after connect) -- slow LLM streams (long thinking pauses >60s)
+        # were severed mid-response: the 'queue hammered, no output for 20 minutes' shape.
+        # Connect-timeout for dialing only; stream reads unbounded.
+        up.settimeout(None)
+    except OSError:
+        conn.close()
+        return
+    threading.Thread(target=fwd, args=(conn, up, True), daemon=True).start()
+    threading.Thread(target=fwd, args=(up, conn, False), daemon=True).start()
+
+def main():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE if sys.platform == "win32" else socket.SO_REUSEADDR, 1)
+    s.bind(LOCAL)
+    s.listen(128)
+    print("twin proxy 127.0.0.1:8082 -> 127.0.0.1:47831 (Host-rewriting)", flush=True)
+    while True:
+        c, _ = s.accept()
+        threading.Thread(target=handle, args=(c,), daemon=True).start()
+
+if __name__ == "__main__":
+    main()

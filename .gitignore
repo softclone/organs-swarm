@@ -1,0 +1,6 @@
+local.json
+secrets/
+*.pyc
+__pycache__/
+data/
+.venv/
