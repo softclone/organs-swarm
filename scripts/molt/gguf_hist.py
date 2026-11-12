@@ -25,10 +25,13 @@ if not p:
     print("GGUF-UNCONFIGURED: pass a .gguf path as argv (or set ORGANS_GGUF_FILE) -- exit 2, this rig parses the file you point it at")
     sys.exit(2)
 f = open(p, "rb")
-if f.read(4) != b"GGUF":  # wave-4 F-06: gate is CODE (assert side-effect vanishes under -O)
+_hdr = f.read(16)  # wave-7 F23 cure: header LENGTH gate before any unpack -- a 4-byte 'GGUF' file passed magic then died with struct.error
+if len(_hdr) < 16:
+    print(f"GGUF-HEADER-TRUNCATED: only {len(_hdr)} of 16 header bytes at {p} -- refusing (exit 2)"); sys.exit(2)
+if _hdr[:4] != b"GGUF":  # wave-4 F-06: gate is CODE (assert side-effect vanishes under -O)
     print("NOT A GGUF (magic):", p); sys.exit(2)
-_ver = struct.unpack("<I", f.read(4))[0]
-n_tensors = struct.unpack("<Q", f.read(8))[0]
+_ver = struct.unpack("<I", _hdr[4:8])[0]
+n_tensors = struct.unpack("<Q", _hdr[8:16])[0]
 if n_tensors == 0:  # wave-4 F-14: a zero-tensor file is not a walk (law 23: zero work is not green)
     print("ZERO tensors in header: refusing (exit 2)"); sys.exit(2)
 n_kv = struct.unpack("<Q", f.read(8))[0]

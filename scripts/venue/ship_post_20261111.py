@@ -40,6 +40,8 @@ if not (3 <= u16(title) <= 120):
     print(f"TITLE GATE: {u16(title)} utf16 units (need 3-120) -- exit 2, not shipped"); sys.exit(2)
 if u16(body) > 8000:
     print(f"BODY GATE: {u16(body)} utf16 units > 8000 -- exit 2, not shipped"); sys.exit(2)
+if not body.strip():
+    print("BODY GATE: empty body -- exit 2, not shipped (wave-7 F16: the upper-only gate let nothing-through pass)"); sys.exit(2)
 # SCREEN leg (suite wave 3 caught it missing: the packaged one-shot leg had gates for length only --
 # the ship-queue rig screens bodies, a post leg must too: keys/secrets/long-tokens never ride the door)
 # wave-6 W6-04: ONE grammar -- BAD imported from the shared screen module (scripts/screen.py),
@@ -51,6 +53,13 @@ BAD = _screen.BAD  # wave-4 F-10 + wave-6 W6-04: same grammar as preflight (case
 hit = BAD.search(title + "\n" + body)
 if hit:
     print(f"SCREEN: sensitive-shape {hit.group(0)!r} in title/body -- exit 2, not shipped"); sys.exit(2)
+# wave-7 F1 cure: ship_post must run the FULL shared SCREENS list (email/ipv4/home-path/...),
+# not the BAD keyword subset -- the door the queue screens, the one-shot post leg must screen equally.
+_text6 = title + "\n" + body
+for _nm6, _rx6 in _screen.SCREENS:
+    _h6 = _rx6.search(_text6)
+    if _h6:
+        print(f"SCREEN[{_nm6}]: sensitive-shape {_h6.group(0)!r} in title/body -- exit 2, not shipped"); sys.exit(2)
 
 def http(p, data=None):
     h = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json",
@@ -59,7 +68,12 @@ def http(p, data=None):
                                 data=json.dumps(data).encode() if data else None, headers=h)
     return json.loads(urllib.request.urlopen(rq, timeout=30).read())
 
-d = http("/api/post", {"title": title, "body": body})
+try:
+    d = http("/api/post", {"title": title, "body": body})
+except SystemExit:
+    raise
+except Exception as _e17:  # wave-7 F17 cure: transport death names itself, prints no Traceback
+    print(f"POST DOOR: transport death {type(_e17).__name__} -- post status UNKNOWN, no receipt written, verify manually (exit 1)"); sys.exit(1)
 pid = d.get("post_id")
 if not pid:  # F-01b cure (wave 4, deleg_4fbe40ed): assert rides -O strip -> null-pid receipt lands; gate is code
     print(f"NO post_id IN RECEIPT: keys={sorted(d.keys())} -- NOT citing undefined, no receipt written (exit 2)")
@@ -74,7 +88,7 @@ os.makedirs(os.path.join(HOME, "data"), exist_ok=True)
 import datetime
 rec = {"post_id": pid, "title": title, "units": u16(body), "readback_ok": False,
        "ts": datetime.datetime.now(datetime.timezone.utc).isoformat()}
-out = os.path.join(HOME, f"data/ship-post-receipt-{int(time.time())}.json")
+out = os.path.join(HOME, f"data/ship-post-receipt-{int(time.time())}-{pid}.json")  # wave-7 F14: second-resolution alone lets same-second posts clobber each other's receipts
 def _atomic(obj, path):
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path))
     try:

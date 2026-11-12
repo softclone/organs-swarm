@@ -85,8 +85,8 @@ def parse(t):
 
 def interval_sec(sched):
     d = (sched.get("display") or "").lower()
-    m = re.search(r"every (\d+)([mh])", d)
-    if m: return int(m.group(1)) * (3600 if m.group(2) == "h" else 60)
+    m = re.search(r"every (\d+)([smh])", d)  # wave-7 F20 cure: seconds grammar included -- a dropped 'every 30s' bell was invisible to the census
+    if m: return int(m.group(1)) * (3600 if m.group(2) == "h" else 1 if m.group(2) == "s" else 60)
     if "weekly" in d: return 604800
     for wd in ("monday","tuesday","wednesday","thursday","friday","saturday","sunday"):
         if "every " + wd in d: return 604800
@@ -130,8 +130,14 @@ for j in jl:
     if iv: seen += 1
     if iv and lr and (now - lr).total_seconds() > thr * iv:
         misses.append((str(j.get("name")), disp, round((now - lr).total_seconds() / 3600, 1)))
+    # wave-7 F8 cure: a PRESENT-but-malformed last_run_at parses to None -- that is an
+    # unreadable bookkeeping field (advisory), NOT a manufactured 'never-fired past-due' miss.
     if lr is None and nx and nx <= now:
-        misses.append((str(j.get("name")), disp, "never-fired past-due"))
+        _raw_lr = j.get("last_run_at")
+        if _raw_lr:
+            print("CADENCE-ADVISORY: malformed last_run_at on", str(j.get("name")), "-- cadence state unreadable, not counted as never-fired")
+        else:
+            misses.append((str(j.get("name")), disp, "never-fired past-due"))
 
 if misses:
     print("CADENCE AUDIT fired at", now.isoformat()[:19], "Z (machine clock)")
@@ -207,7 +213,11 @@ try:
         for _l in open(os.environ.get("ORGANS_BELL_FIRINGS") or _cfgkey("bell_firings") or os.path.join(_home_dir(), "data", "bell-firings.jsonl"), encoding="utf-8"):  # wave-6 W6-10: config key bell_firings now rides the chain
             _r = json.loads(_l)
             if _r.get("last_run"):
-                _seen.setdefault(_r["job"], set()).add(_r["last_run"])
+                _jn7 = _r.get("job")  # wave-7 F25 cure: a torn record missing 'job' is skipped with an advisory -- it must NOT abort the leg
+                if not _jn7:
+                    print("CADENCE-ADVISORY: firing record without 'job' key skipped:", str(_r)[:60])
+                    continue
+                _seen.setdefault(_jn7, set()).add(_r["last_run"])
     except FileNotFoundError:
         pass
     _res_lines = []
@@ -258,15 +268,19 @@ for _j in jl:
     _nm = str(_j.get("name") or str(_j.get("job_id", "?"))[:12])
     _sch6 = _j.get("schedule") if isinstance(_j.get("schedule"), dict) else {}  # wave-6 W6-14: string schedule is store drift; census mirrors the misses-leg guard
     _kind = str(_sch6.get("kind") or "")
-    _is_carrier = "cadence_audit" in str(_j.get("script") or "")
+    _is_carrier = os.path.basename(str(_j.get("script") or "")).startswith("cadence_audit")  # wave-7 F13 cure: basename stamp -- a substring anywhere in the path misclassified unrelated scripts
+    _streak7 = int(_j.get("failure_streak") or 0)  # wave-7 F12 cure: the promised register read in CODE: carrier alerts at streak >= 2 (census died twice running)
     if _kind == "once" or not _j.get("enabled"):  # wave-4 F-08: a DISABLED bell will never fire again: obituary, not alert
         hist_reds += 1
     elif _is_carrier:
         # the census CANNOT distinguish its own echo from its own death: both read as
         # its own last_status. Carrier reds are advisory, named, disclosed -- the
         # witness for census death is the bell-runner log, not the census (named blind spot).
-        carrier_reds += 1
-        carrier_list.append((_nm, _st[:40]))
+        if _streak7 >= 2:
+            live_reds.append((_nm, f"CARRIER DEATH streak {_streak7} (alert, register-read): " + _st[:40]))
+        else:
+            carrier_reds += 1
+            carrier_list.append((_nm, _st[:40]))
     else:
         live_reds.append((_nm, _st[:40]))
 if carrier_reds:

@@ -20,7 +20,11 @@ HOME = _organs_home()
 # file order; the newest row's canonical pair anchors the live chain). Disclosed old pairs
 # ride inside newer rows' bodies -> they are chain members of OLD chains, not the live one.
 import re
-txt = open(os.path.join(HOME, "ledgers/CORPUS.md"), encoding="utf-8").read()
+_led = os.path.join(HOME, "ledgers/CORPUS.md")
+if not os.path.exists(_led):
+    print(f"COUNTER-HEAD: no ledger at {_led} -- reader advisory, exit 2 (wave-7 F18 cure: unguarded open printed a Traceback)")
+    raise SystemExit(2)
+txt = open(_led, encoding="utf-8").read()
 rows = txt.splitlines()
 pairs = [(int(a), int(b)) for a, b in re.findall(r"Counter (\d+)->(\d+)", txt)]
 strict = {(a, b) for a, b in pairs if b == a + 1}
@@ -40,7 +44,9 @@ for line in reversed(rows):
 if not last_pair:
     print("no canonical pair on disk"); raise SystemExit(1)
 head = last_pair[1]
-contig = all((head - k - 1) in froms and (head - k) in tos for k in range(5))
+# wave-7 F9 cure: contiguity walks PAIRS (a,b in strict with b==a+1), not global
+# froms/tos membership -- scattered pairs welded a false 'contiguous' verdict.
+contig = all((head - k - 1, head - k) in strict for k in range(5))
 # Cure wave 2 (C5-16492): count ROWS printing the head pair, not whole-text occurrences
 prints = sum(1 for line in rows if re.search(rf"Counter {head - 1}->{head}(?!\d)", line))
 naive = pairs[-1][1]

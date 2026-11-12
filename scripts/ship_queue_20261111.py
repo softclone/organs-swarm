@@ -93,7 +93,7 @@ for pid in sorted(set(s[1] for s in ships)):
         gate(since is not None, f"CAP-EXIT post {pid}")
         gate(since != prev6, f"CAP-EXIT post {pid}: NO PROGRESS, door re-served cursor {since!r} -- wave-6 W6-09")
         pages6 += 1
-        gate(pages6 <= 200, f"CAP-EXIT post {pid}: page cap 200 -- wave-6 W6-09")
+        gate(pages6 < 200, f"CAP-EXIT post {pid}: page cap 200 reached at fetch {pages6} -- wave-7 F22 cure: old gate fired only on the 201st fetch")  # wave-6 W6-09
         prev6 = since
         time.sleep(4)
     pp6 = http(f"/api/post/{pid}")
@@ -140,6 +140,9 @@ for n, pid, par, body in ships:
     payload = {"post_id": pid, "body": body}
     if par: payload["parent_id"] = int(par)
     d = http("/api/comment", payload)
+    if not isinstance(d, dict):  # wave-7 F5 cure: non-dict POST receipt must not crash .get
+        print(f"WRITE DOOR NON-DICT receipt ship {n}: {type(d).__name__} -- write state unknown, do NOT blind re-ring", flush=True)
+        sys.exit(1)
     cid = d.get("comment_id")
     if not cid:
         print(f"NO comment_id in receipt ship {n} post {pid}: write may have landed -- verify manually, do NOT blind re-ring", flush=True)

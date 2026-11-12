@@ -86,9 +86,17 @@ def main():
                 if not isinstance(rec, dict):
                     corrupt += 1
                     continue
-                g = rec.get("gid") or rec.get("pin") or rec.get("post_id") or rec.get("post") or rec.get("comment_id")  # wave-6 W6-01: REAL queue receipts ride ship/post/comment_id -- union reads the FULL receipt grammar
+                # wave-6 W6-01: REAL queue receipts ride ship/post/comment_id -- union reads the FULL receipt grammar.
+                # wave-7 F2 cure: the old `or`-chain took the FIRST truthy field, so a record
+                # carrying post=4647 SHADOWED comment_id=143472 -> a landed comment read fresh.
+                # Compare gid against EVERY id field the record carries, not the chain's first hit.
+                _ids6 = [rec.get(k) for k in ("gid", "pin", "post_id", "post", "comment_id")
+                         if rec.get(k) not in (None, "")]
+                if not _ids6:
+                    corrupt += 1  # wave-7 F4 cure: an id-less dict is a torn receipt, not fresh (fail-closed)
+                    continue
                 # P3/N1 cures kept: typed compare, total, crash-closed on any throw.
-                if g == gid or str(g) == str(gid):
+                if any(i == gid or str(i) == str(gid) for i in _ids6):
                     dup.append(_rp)
         if corrupt:
             gate_open = True

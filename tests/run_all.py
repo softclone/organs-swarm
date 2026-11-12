@@ -835,6 +835,151 @@ _cad("tz-out-of-range-advisory", _greenjob6, 0, ("READER ADVISORY",), ("Tracebac
 _cad("threshold-nan-advisory", _greenjob6, 0, ("READER ADVISORY",), ("Traceback",), {"CADENCE_THRESHOLD": "nan"})
 _cad("threshold-abc-advisory", _greenjob6, 0, ("READER ADVISORY",), ("Traceback",), {"CADENCE_THRESHOLD": "abc"})
 
+# ================= WAVE-7 red-path legs (deleg_6ee9334b cure proofs, 2026-11-12) =================
+# 17 findings; blockers all screen/union fail-open directions. Hermetic: gates fire before doors;
+# urlopen mocked on the transport leg; SECRET stubs carry a fake value, label only.
+import urllib.error as _ue7
+
+_SP7 = os.path.join(REPO, "scripts/venue/ship_post_20261111.py")
+_PF7 = os.path.join(REPO, "scripts/venue/preflight_1f916.py")
+_CH7 = os.path.join(REPO, "scripts/counter_head.py")
+_GH7 = os.path.join(REPO, "scripts/molt/gguf_hist.py")
+
+def _home7(tag):
+    h = tempfile.mkdtemp(prefix="w7-" + tag + "-")
+    os.makedirs(os.path.join(h, "data"), exist_ok=True)
+    os.makedirs(os.path.join(h, "ledgers"), exist_ok=True)
+    s = tempfile.mkdtemp(prefix="w7sec-")
+    json.dump({"secret": "F-STUB-VALUE-NEVER-PRINTED"}, open(os.path.join(s, "1f916.json"), "w", encoding="utf-8"))
+    return h, s
+
+def _sp7(label, body_text, want_rc, want_in):
+    h, s = _home7("sp")
+    bf = os.path.join(h, "body.txt")
+    open(bf, "w", encoding="utf-8").write(body_text)
+    r = subprocess.run([sys.executable, _SP7, "Wave7 proof title", bf], capture_output=True, text=True,
+                       timeout=90, env=dict(os.environ, ORGANS_HOME=h, ORGANS_SECRETS=s))
+    out = r.stdout + r.stderr
+    record(label, r.returncode == want_rc and want_in in out and "Traceback (most recent call last)" not in out,
+           "rc=" + str(r.returncode) + " " + out.strip()[-70:])
+
+_sp7("w7-post-screens-email-F1", "digest line contact root@example.org tail " * 3, 2, "SCREEN[email]")
+_sp7("w7-post-refuses-empty-body-F16", "", 2, "BODY GATE: empty body")
+
+# F3b/F3c: shared screen grammar unit -- uppercase SK- screened; dotted (JWT-shaped) token joins the run
+sys.path.insert(0, os.path.join(REPO, "scripts"))
+import screen as _sc7
+_sk7 = any(rx.search("prefix SK-ABCDEFGHIJKLMNOP tail") for nm, rx in _sc7.SCREENS)
+_jwt7 = "header." + "a" * 20 + "." + "b" * 25
+_jt7 = any(rx.search(_jwt7) for nm, rx in _sc7.SCREENS)
+record("w7-screen-sk-case-jwt-join-F3b-F3c", _sk7 and _jt7, f"SK={_sk7} JWT={_jt7}")
+
+# F2/F4: preflight union -- shadowed comment_id reads LANDED; id-less dict is corrupt (fail-closed)
+_h4, _s4 = _home7("pf")
+_bf4 = os.path.join(_h4, "b.txt"); open(_bf4, "w", encoding="utf-8").write("proof body for preflight " * 5)
+_rp4 = os.path.join(_h4, "data", "ship-post-receipt-1.json")
+json.dump([{"post": 4647, "comment_id": 143472, "title": "t"}], open(_rp4, "w", encoding="utf-8"))
+_r = subprocess.run([sys.executable, _PF7, _bf4, "143472"], capture_output=True, text=True, timeout=90,
+                    env=dict(os.environ, ORGANS_HOME=_h4, ORGANS_SECRETS=_s4))
+record("w7-preflight-shadowed-comment-landed-F2", _r.returncode == 1 and "ALREADY LANDED, SKIP" in _r.stdout, "rc=" + str(_r.returncode) + " " + _r.stdout.strip()[-60:])
+json.dump([{}], open(_rp4, "w", encoding="utf-8"))
+_r = subprocess.run([sys.executable, _PF7, _bf4, "143472"], capture_output=True, text=True, timeout=90,
+                    env=dict(os.environ, ORGANS_HOME=_h4, ORGANS_SECRETS=_s4))
+record("w7-preflight-idless-dict-closed-F4", _r.returncode == 1 and "gate CLOSED (fail-closed)" in _r.stdout, "rc=" + str(_r.returncode) + " " + _r.stdout.strip()[-60:])
+
+# F8: malformed last_run_at is a READER advisory, never a manufactured never-fired miss
+_j8 = [{"name": "malformed-stamp", "enabled": True, "state": "scheduled", "last_status": "ok",
+        "schedule": {"kind": "interval", "display": "every 10m"}, "last_run_at": "NOT-A-DATE",
+        "next_run_at": "2026-11-12T00:00:00-06:00", "failure_streak": 0}]
+_cad("w7-cadence-malformed-stamp-advisory-F8", _j8, 0, ("CADENCE-ADVISORY: malformed last_run_at",),
+     ("never-fired past-due", "Traceback (most recent call last)"))
+# F20: seconds grammar visible to the census -- a stale every-30s bell READS as a miss
+_j20 = [{"name": "thirty", "enabled": True, "state": "scheduled", "last_status": "ok",
+         "schedule": {"kind": "interval", "display": "every 30s"},
+         "last_run_at": "2026-11-12T05:30:00-06:00", "next_run_at": "2026-11-12T06:00:00-06:00", "failure_streak": 0}]
+_cad("w7-cadence-30s-grammar-visible-F20", _j20, 1, ("MISS:", "every 30s"), ("Traceback (most recent call last)",),
+     extra_env={"CADENCE_NOW": "2026-11-12T06:00:00-06:00"})
+
+# F25: job-less firing record skipped with advisory; leg survives
+_f25 = tempfile.mktemp(suffix=".jsonl")
+_now25 = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-6)))
+open(_f25, "w", encoding="utf-8").write(json.dumps({"last_run": (_now25 - datetime.timedelta(seconds=60)).isoformat()}) + "\n")
+_jf = [{"name": "ok-bell", "enabled": True, "state": "scheduled", "last_status": "ok",
+        "schedule": {"kind": "interval", "display": "every 10m"},
+        "last_run_at": (_now25 - datetime.timedelta(seconds=60)).isoformat(),
+        "next_run_at": (_now25 + datetime.timedelta(seconds=540)).isoformat(), "failure_streak": 0}]
+_cad("w7-cadence-jobless-firing-skipped-F25", _jf, 0, ("firing record without 'job' key skipped",),
+     ("Traceback (most recent call last)",), extra_env={"ORGANS_BELL_FIRINGS": _f25})
+
+# F12/F13: carrier alerts at failure_streak>=2 (register read in CODE); carrier identity is basename, not path substring
+_j12 = [
+    {"name": "cadence-audit-daily", "enabled": True, "state": "scheduled", "last_status": "error",
+     "schedule": {"kind": "interval", "display": "every 1d"}, "script": "C:/x/shop3/scripts/cadence_audit.py",
+     "last_run_at": "2026-11-12T07:05:00-06:00", "next_run_at": "2026-11-13T07:05:00-06:00", "failure_streak": 2},
+    {"name": "innocent", "enabled": True, "state": "scheduled", "last_status": "error",
+     "schedule": {"kind": "interval", "display": "every 10m"}, "script": "C:/x/cadence_audit_notes/totally_other.py",
+     "last_run_at": "2026-11-12T05:56:00-06:00", "next_run_at": "2026-11-12T06:06:00-06:00", "failure_streak": 1},
+]
+_cad("w7-cadence-carrier-streak2-alert-F12", _j12, 1, ("CARRIER DEATH streak 2", "LIVE-RED: innocent"),
+     ("Traceback (most recent call last)",), extra_env={"CADENCE_NOW": "2026-11-12T06:00:00-06:00"})
+
+# F9: contiguity walks PAIRS; scattered pairs read False, a real chain reads True. F18: missing ledger is advisory exit 2.
+_h9, _s9 = _home7("ch")
+_led9 = os.path.join(_h9, "ledgers", "CORPUS.md")
+open(_led9, "w", encoding="utf-8").write(
+    "| a | 2026-11-11 | old Counter 99->100 quoted prose Counter 5000->5001 |\n"
+    "| b | 2026-11-12 | head C5-9 Counter 101->102 |\n")
+_r = subprocess.run([sys.executable, _CH7], capture_output=True, text=True, timeout=60,
+                    env=dict(os.environ, ORGANS_HOME=_h9))
+record("w7-counter-pairwalk-scattered-F9", _r.returncode == 0 and "contiguous(5 back): False" in _r.stdout, "rc=" + str(_r.returncode) + " " + _r.stdout.strip()[-70:])
+open(_led9, "w", encoding="utf-8").write("".join(
+    "| c%d | 2026-11-12 | C5-10%d body Counter %d->%d |\n" % (i, i, 100 + i, 101 + i) for i in range(5)))
+_r = subprocess.run([sys.executable, _CH7], capture_output=True, text=True, timeout=60,
+                    env=dict(os.environ, ORGANS_HOME=_h9))
+record("w7-counter-pairwalk-chain-F9", _r.returncode == 0 and "contiguous(5 back): True" in _r.stdout, "rc=" + str(_r.returncode) + " " + _r.stdout.strip()[-70:])
+_h18, _s18 = _home7("ch18")
+_r = subprocess.run([sys.executable, _CH7], capture_output=True, text=True, timeout=60,
+                    env=dict(os.environ, ORGANS_HOME=_h18))
+record("w7-counter-missing-ledger-advisory-F18", _r.returncode == 2 and "no ledger at" in _r.stdout and "Traceback (most recent call last)" not in _r.stdout + _r.stderr,
+       "rc=" + str(_r.returncode) + " " + _r.stdout.strip()[-70:])
+
+# F23: truncated GGUF header refuses with a named gate, not struct.error
+_g7 = tempfile.mktemp(suffix=".gguf"); open(_g7, "wb").write(b"GGUF")
+_r = subprocess.run([sys.executable, _GH7, _g7], capture_output=True, text=True, timeout=60)
+record("w7-gguf-header-truncated-refuse-F23", _r.returncode == 2 and "HEADER-TRUNCATED" in _r.stdout and "struct.error" not in _r.stderr,
+       "rc=" + str(_r.returncode) + " " + (_r.stdout + _r.stderr).strip()[-70:])
+
+# F17: POST transport death names itself (hermetic: non-GET raises in the mock)
+_h17, _s17 = _home7("sp17")
+_bf17 = os.path.join(_h17, "b.txt"); open(_bf17, "w", encoding="utf-8").write("clean proof body with no sensitive shapes " * 2)
+_mk17 = os.path.join(_h17, "mock.py")
+open(_mk17, "w", encoding="utf-8").write(
+    "import sys, urllib.request, urllib.error, runpy\n"
+    "def _r(q, *a, **k): raise urllib.error.URLError('hermetic: write door refused')\n"
+    "urllib.request.urlopen = _r\n"
+    "sys.argv = [r\"" + _SP7.replace("\\", "/") + "\", \"Proof title\", r\"" + _bf17.replace("\\", "/") + "\"]\n"
+    "runpy.run_path(sys.argv[0], run_name=\"__main__\")\n")
+_r = subprocess.run([sys.executable, _mk17], capture_output=True, text=True, timeout=90,
+                    env=dict(os.environ, ORGANS_HOME=_h17, ORGANS_SECRETS=_s17))
+record("w7-post-transport-death-named-F17", _r.returncode == 1 and "POST DOOR: transport death" in _r.stdout and "Traceback (most recent call last)" not in _r.stdout + _r.stderr,
+       "rc=" + str(_r.returncode) + " " + (_r.stdout + _r.stderr).strip()[-70:])
+
+# F1/F14/F22/F5: source-grammar legs (receipt name carries pid; page cap fires at 200; ship_post runs the FULL SCREENS list; write door isinstance gate)
+_srcpost = open(_SP7, encoding="utf-8").read()
+_srcsq7 = open(sq, encoding="utf-8").read()
+record("w7-post-runs-full-screens-F1", "_screen.SCREENS" in _srcpost, "post imports full grammar")
+record("w7-post-receipt-name-carries-pid-F14", "ship-post-receipt-{int(time.time())}-{pid}" in _srcpost, "receipt name is per-post")
+record("w7-queue-pagecap-fires-at-200-F22", "gate(pages6 < 200" in _srcsq7, "cap gate named")
+# F5 behavioral leg: POST door answering non-dict closes fail-closed, no .get crash
+def _router_nd7(p, req):
+    if p.startswith("/api/post/100") and req.data is None: return {"comments": [], "has_more": False, "post": {"body": "post body"}}
+    if p == "/api/me": return {"me": {"handle": "tester", "today": {"comments_remaining": 8}}}
+    if p == "/api/comment" and req.data: return ["NOT", "A", "DICT"]
+    return {}
+code, out, *_ = run_rig(sq, _router_nd7, {QF: q_green})
+record("w7-queue-nondict-write-door-closed-F5", code == 1 and "WRITE DOOR NON-DICT" in out and "Traceback (most recent call last)" not in out,
+       "rc=" + str(code) + " " + out.strip()[-70:])
+
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
 sys.exit(1 if n_fail else 0)
