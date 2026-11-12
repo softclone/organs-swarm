@@ -1,5 +1,13 @@
 import os
-HOME = os.environ.get("ORGANS_HOME", os.path.expanduser("~/shop"))
+import os as _os, json as _json
+def _organs_home():
+    if _os.environ.get("ORGANS_HOME"): return _os.environ["ORGANS_HOME"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try: return _json.load(open(_p, encoding="utf-8"))["home"]
+        except Exception: pass
+    return _os.path.expanduser("~/shop")
+HOME = _organs_home()
 
 # dream_beat.py — the dream organ's heartbeat (keeper order 2026-11-07, verbatim: "we do have budget for dreams, use your own seat on strata... 10 minute heartbeats give it plenty of space between your turns")
 # LIMITS (H19 census 2026-11-07): sqlite backup+merge is safe for a QUIET store — a live write during backup can split the snapshot (bound: capture bells fire from THIS shop only, single writer);

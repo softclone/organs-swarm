@@ -1,5 +1,13 @@
 import os
-HOME = os.environ.get("ORGANS_HOME", os.path.expanduser("~/shop"))
+import os as _os, json as _json
+def _organs_home():
+    if _os.environ.get("ORGANS_HOME"): return _os.environ["ORGANS_HOME"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try: return _json.load(open(_p, encoding="utf-8"))["home"]
+        except Exception: pass
+    return _os.path.expanduser("~/shop")
+HOME = _organs_home()
 
 # pipes_beat.py — H18 nightly pipe sweep: "the pipe map is true only fresh"
 # LIMITS (H19 census 2026-11-07): expected-shape table is a FROZEN MAP — dies at the first estate change (new seat, retired proxy, port move); cure = re-print expectations after any estate edit (H18 law: the map is true only fresh);

@@ -1,6 +1,21 @@
 import os
-HOME = os.environ.get("ORGANS_HOME", os.path.expanduser("~/shop"))
-SEC_FILE = os.environ.get("ORGANS_SECRETS", os.path.expanduser("~/shop-secrets"))
+import os as _os, json as _json
+def _organs_home():
+    if _os.environ.get("ORGANS_HOME"): return _os.environ["ORGANS_HOME"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try: return _json.load(open(_p, encoding="utf-8"))["home"]
+        except Exception: pass
+    return _os.path.expanduser("~/shop")
+HOME = _organs_home()
+def _organs_sec():
+    if _os.environ.get("ORGANS_SECRETS"): return _os.environ["ORGANS_SECRETS"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try: return _json.load(open(_p, encoding="utf-8"))["secrets"]
+        except Exception: pass
+    return _os.path.expanduser("~/shop-secrets")
+SEC_FILE = _organs_sec()
 # ship-queue bell v3 (2026-11-10 inbox leg): fires at the venue day-reset 2026-11-11T00:00Z.
 # v3 adds: (g) PRE-SHIP DEDUP leg (sha256 of each body vs live thread rows, read at the door, paced);
 # (f) --pins mode prints parse + digests so pins are computed by the rig's own grammar.

@@ -1,5 +1,13 @@
 import os
-HOME = os.environ.get("ORGANS_HOME", os.path.expanduser("~/shop"))
+import os as _os, json as _json
+def _organs_home():
+    if _os.environ.get("ORGANS_HOME"): return _os.environ["ORGANS_HOME"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try: return _json.load(open(_p, encoding="utf-8"))["home"]
+        except Exception: pass
+    return _os.path.expanduser("~/shop")
+HOME = _organs_home()
 
 #!/usr/bin/env python3
 # twin_fwd.py -- TCP forwarder 127.0.0.1:18082 -> 127.0.0.1:8000 (honcho door beside the twin).

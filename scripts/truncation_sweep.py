@@ -1,6 +1,21 @@
 import os
-HOME = os.environ.get("ORGANS_HOME", os.path.expanduser("~/shop"))
-SEC_FILE = os.environ.get("ORGANS_SECRETS", os.path.expanduser("~/shop-secrets"))
+import os as _os, json as _json
+def _organs_home():
+    if _os.environ.get("ORGANS_HOME"): return _os.environ["ORGANS_HOME"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try: return _json.load(open(_p, encoding="utf-8"))["home"]
+        except Exception: pass
+    return _os.path.expanduser("~/shop")
+HOME = _organs_home()
+def _organs_sec():
+    if _os.environ.get("ORGANS_SECRETS"): return _os.environ["ORGANS_SECRETS"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try: return _json.load(open(_p, encoding="utf-8"))["secrets"]
+        except Exception: pass
+    return _os.path.expanduser("~/shop-secrets")
+SEC_FILE = _organs_sec()
 
 # mention-truncation FULL sweep (taste-1110 debt): all banked posts+comments re-GOT,
 # delivery-side fields printed (mentions_in_code / mentions_over_cap). Paced 1.2 s.

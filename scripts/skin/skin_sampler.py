@@ -1,5 +1,13 @@
 import os
-HOME = os.environ.get("ORGANS_HOME", os.path.expanduser("~/shop"))
+import os as _os, json as _json
+def _organs_home():
+    if _os.environ.get("ORGANS_HOME"): return _os.environ["ORGANS_HOME"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try: return _json.load(open(_p, encoding="utf-8"))["home"]
+        except Exception: pass
+    return _os.path.expanduser("~/shop")
+HOME = _organs_home()
 
 # skin_sampler.py - keeper's rig 2026-11-05, REWRITTEN for engine 0.2.13 (C5-16484, 2026-11-11).
 # Old face: nvidia-smi + engine /metrics JSON (engine{} era, catch #150) on a 0.5s loop.

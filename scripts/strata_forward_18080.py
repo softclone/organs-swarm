@@ -1,5 +1,13 @@
 import os
-HOME = os.environ.get("ORGANS_HOME", os.path.expanduser("~/shop"))
+import os as _os, json as _json
+def _organs_home():
+    if _os.environ.get("ORGANS_HOME"): return _os.environ["ORGANS_HOME"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try: return _json.load(open(_p, encoding="utf-8"))["home"]
+        except Exception: pass
+    return _os.path.expanduser("~/shop")
+HOME = _organs_home()
 
 # strata_forward_18080.py - shop-side TCP forwarder: WSL dream seat route (keeper order 2026-11-07)
 # Forwards 0.0.0.0:18080 -> 127.0.0.1:8080 (strata). Shop-owned, stdlib, threaded.

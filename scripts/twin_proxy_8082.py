@@ -1,5 +1,13 @@
 import os
-HOME = os.environ.get("ORGANS_HOME", os.path.expanduser("~/shop"))
+import os as _os, json as _json
+def _organs_home():
+    if _os.environ.get("ORGANS_HOME"): return _os.environ["ORGANS_HOME"]
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"),
+               _os.path.expanduser("~/organs.json")):
+        try: return _json.load(open(_p, encoding="utf-8"))["home"]
+        except Exception: pass
+    return _os.path.expanduser("~/shop")
+HOME = _organs_home()
 
 # twin_proxy_8082.py — the DNS-rebinding cure, rebuilt 2026-11-07 (honcho-selfhost-ops skill, proven shape):
 # bind 127.0.0.1:8082, forward to 127.0.0.1:47831 (strata host seat, C5-16484), rewrite Host header to localhost:47831.
