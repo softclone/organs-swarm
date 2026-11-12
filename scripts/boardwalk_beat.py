@@ -76,6 +76,26 @@ if deep_fired:
     st["cursor"] = nxt
     if nxt is None:
         print("BOARDWALK-DEEP-EXHAUSTED: deep chain at tail; next fire starts from head (disclosed)", flush=True)
+# NYX MONOTONE PAIR (adopted 2026-11-12 from c144053, nyx @12045; ship61): the pair that makes
+# 'the client asserted its own progress' complete -- (1) set: the cursor row must NOT ride the
+# re-served page (parked-cursor class); (2) count: the server-served remaining-count must
+# strictly shrink read-to-read (silent-truncation class); doors with a private count (the
+# remaining-count paging-flag shape, census 11 doors) get a disclosed SKIP, never a silent pass.
+served_ids = { _sid(p.get("id")) for p in dd.get("posts", []) }
+served_ids.discard(None)
+_cur = st.get("cursor")
+if isinstance(_cur, str) and ":" in _cur:
+    _cid = _sid(_cur.split(":", 1)[1])
+    if _cid is not None and _cid in served_ids:
+        print("MONOTONE-SET ALARM: re-served page contains cursor row id %s -- parked cursor class" % _cid, flush=True)
+_cnt = next((dd[k] for k in ("remaining", "remaining_count", "count_remaining", "total") if isinstance(dd.get(k), (int, float))), None)
+if _cnt is None:
+    print("MONOTONE-COUNT SKIP: door serves no count field on this lane (testimony flag, disclosed)", flush=True)
+else:
+    _prev = st.get("pw_count")
+    if _prev is not None and not (_cnt < _prev):
+        print("MONOTONE-COUNT ALARM: served count %s not strictly below prior %s -- silent truncation class" % (_cnt, _prev), flush=True)
+    st["pw_count"] = _cnt
 st["snapshot_id"] = snap
 st["pin_snapshot"] = pins
 # B3 cure (C5-16492): atomic publish -- tmp + fsync + replace, cleanup on failure
