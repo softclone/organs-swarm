@@ -167,7 +167,19 @@ try:
         print("COUNTER LEG INERT (advisory): ORGANS_ROW_PREFIX not configured -- shop ledger grammar is a config value")
         _rows = []
     else:
-        _rows = re.findall(r"\| " + re.escape(_prefix) + r"-(\d+) ", _d)
+        # gate law v2 worn by the counter leg (2026-11-12, dup-label '7' false firing):
+        # the serial gate counts the LABEL FIELD only -- field 2 of the row (fixed offset,
+        # full-match grammar). Body prose quoting "| C5-7 CLOSED" is data, not a booked slot.
+        _rows = []
+        for _ln in _d.splitlines():
+            if not _ln.startswith("| "):
+                continue
+            _fx = _ln.lstrip("| ").split(" | ")  # label = FIRST field that full-matches C5-N
+            for _f in _fx[:3]:  # label lives in field 0 (mint cell) or 1 (stamped preamble)
+                _m = re.fullmatch(re.escape(_prefix) + r"-(\d+)", _f.strip())
+                if _m:
+                    _rows.append(_m.group(1))
+                    break
     _pairs = [tuple(map(int, x)) for x in re.findall(r"[Cc]ounter\s+(\d{4,5})->(\d{4,5})", _d) if _cw[0] < int(x[1]) < _cw[1]]  # wave-4 F-09b: counter window config-driven
     _breaks = sum(1 for a, b in zip(_pairs, _pairs[1:]) if a[1] != b[0])
     _dups = sorted({n for n in _rows if _rows.count(n) > 2})  # 2026-11-11 rebalance: label pairs = booked collision class (register-policed, append-only); counts >2 = serial-gate breach
@@ -232,6 +244,13 @@ except Exception as _e2:
 # advisory count only, never an alert (7 of the 9 reds at autopsy were obituaries).
 live_reds = []
 hist_reds = 0
+carrier_reds = 0
+carrier_list = []  # census-carrier self-reference cure (2026-11-12, failure_streak 2 quine):
+# cadence-audit-daily RUNS this census. Its last fire is this rig's own exit code: red
+# because the census saw red, saw red because of its own last fire. Counting the carrier
+# as a lane defect manufactures a self-sustaining alarm -- the alarm that screams for
+# two days IS the last organ speaking. Carrier reds become advisory at streak 1; the
+# carrier alerts only at failure_streak >= 2, i.e. the census itself died twice running.
 for _j in jl:
     _st = str(_j.get("last_status") or "")
     if _st in ("", "ok", "green", "success"):
@@ -239,10 +258,21 @@ for _j in jl:
     _nm = str(_j.get("name") or str(_j.get("job_id", "?"))[:12])
     _sch6 = _j.get("schedule") if isinstance(_j.get("schedule"), dict) else {}  # wave-6 W6-14: string schedule is store drift; census mirrors the misses-leg guard
     _kind = str(_sch6.get("kind") or "")
+    _is_carrier = "cadence_audit" in str(_j.get("script") or "")
     if _kind == "once" or not _j.get("enabled"):  # wave-4 F-08: a DISABLED bell will never fire again: obituary, not alert
         hist_reds += 1
+    elif _is_carrier:
+        # the census CANNOT distinguish its own echo from its own death: both read as
+        # its own last_status. Carrier reds are advisory, named, disclosed -- the
+        # witness for census death is the bell-runner log, not the census (named blind spot).
+        carrier_reds += 1
+        carrier_list.append((_nm, _st[:40]))
     else:
         live_reds.append((_nm, _st[:40]))
+if carrier_reds:
+    print("BELL CENSUS: %d census-carrier red(s) -- SELF-REFERENCE ADVISORY, not alert:" % carrier_reds)
+    for _n, _s in carrier_list[:4]:
+        print("  CARRIER-RED (advisory):", _n, "|", _s)
 if live_reds:
     print("BELL CENSUS RED: %d recurring bells non-green at last fire:" % len(live_reds))
     for _n, _s in live_reds[:12]:
