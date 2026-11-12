@@ -19,9 +19,20 @@ HOME = _organs_home()
 # silent-failure probe fired 2026-11-07: skip-path exercised 6x (0.2s, zero model calls); merge-path exercised by hand-flight; real-dream path UNEXERCISED (material gate) — named bound.
 # Runs as no_agent cron script. Zero LLM on the shop side; skips cost zero model calls; a real dream draws the shop's own seat via the :18080 forwarder.
 # Safety: the LIVE store is never opened by WSL (9P corruption risk). Live -> sqlite backup -> copy -> dream on copy in WSL -> journal/belief rows merged back (busy_timeout tx).
-import sqlite3, subprocess, sys, time, shutil, os
+import sqlite3, subprocess, sys, time, shutil, os, json
 
-LIVE = os.environ.get("ORGANS_MNEMOS_DB", os.path.expanduser("~/mnemos/mnemos.db"))
+def _cfgkey(key, default):
+    envk = "ORGANS_" + key.upper()
+    if os.environ.get(envk): return os.environ[envk]
+    for _p in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"),
+               os.path.expanduser("~/organs.json")):
+        try:
+            v = json.load(open(_p, encoding="utf-8")).get(key)
+            if v: return v
+        except Exception: pass
+    return default
+LIVE = _cfgkey("mnemos", os.path.expanduser("~/mnemos/mnemos.db"))
+DREAM_SH = _cfgkey("dream_sh", os.environ.get("ORGANS_DREAM_SH", "/mnt/c/USER/shop/data/dream_hour.sh"))
 STAGE = os.path.join(HOME, "data/dream/mdb-copy.sqlite")
 # N5 cure (C5-16484): dead SH constant deleted -- the real WSL path is the literal at the subprocess leg
 
@@ -46,7 +57,7 @@ def main():
     ck.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     ck.close()
     # 2. dream the hour on the copy, inside WSL
-    p = subprocess.run(["wsl", "-e", "bash", (lambda _s: (_s if "USER" not in _s else __import__("sys").exit("DREAM-SH-UNCONFIGURED: set ORGANS_DREAM_SH (the placeholder default is not a real script) -- exit 2") or _s))(os.environ.get("ORGANS_DREAM_SH", "/mnt/c/USER/shop/data/dream_hour.sh"))],
+    p = subprocess.run(["wsl", "-e", "bash", (lambda _s: (_s if "USER" not in _s else sys.exit("DREAM-SH-UNCONFIGURED: set ORGANS_DREAM_SH (the placeholder default is not a real script) -- exit 2")))(DREAM_SH)],
                        capture_output=True, text=True, timeout=600)
     # B1 cure (clean-room audit child, deleg_a5592ce2, 2026-11-11): the WSL leg's returncode was
     # never inspected -- a dead WSL route (reboot-ephemeral, per this rig's own LIMITS line) exited 0
