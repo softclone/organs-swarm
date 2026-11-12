@@ -11,11 +11,21 @@ HOME = _organs_home()
 
 # skin_sampler.py - keeper's rig 2026-11-05, REWRITTEN for engine 0.2.13 (C5-16484, 2026-11-11).
 # Old face: nvidia-smi + engine /metrics JSON (engine{} era, catch #150) on a 0.5s loop.
-# New face (host :47831, Strata desktop release v0.2.13): /metrics engine door is GONE (SPA
+# New face (host seat (ORGANS_SEAT_URL), Strata desktop release v0.2.13): /metrics engine door is GONE (SPA
 # catch-all serves HTML); body doors = /api/health {ok,uptimeSec,clients} + nvidia-smi.
 # Request rows RETIRED: the release host mounts no request-monitor door (/api/requests 404,
 # verified 2026-11-11). Disclosed, not faked. Rows: (t, temp, util, pow, state, uptime, clients).
 import json, os, subprocess, sys, time, urllib.request, datetime
+import json
+def _seat_url():
+    if os.environ.get("ORGANS_SEAT_URL"): return os.environ["ORGANS_SEAT_URL"]
+    for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"), os.path.expanduser("~/organs.json")):
+        try:
+            v = json.load(open(_q, encoding="utf-8")).get("seat_url")
+            if v: return v
+        except Exception: pass
+    return "http://127.0.0.1:8080"  # portable default: no baked estate port (wave-4 F-12)
+_SEAT = _seat_url().rstrip('/')
 
 SHOP = HOME
 OUT_DIR = os.path.join(SHOP, "data", "skin")
@@ -39,7 +49,7 @@ def out_path():
 def metrics():
     # single named door; failures named (silent-None + dead-8080 class, audit C5-16484 B2/W1)
     try:
-        with urllib.request.urlopen("http://127.0.0.1:47831/api/health", timeout=0.9) as r:
+        with urllib.request.urlopen(_SEAT + "/api/health", timeout=0.9) as r:
             return json.load(r)
     except Exception as e:
         print("METRICS-ERR:", type(e).__name__, flush=True)

@@ -15,6 +15,16 @@ HOME = _organs_home()
 # sources: nvidia-smi + strata /metrics + llama-server process memory
 # writes JSONL rows (flush each row); observation rig, no scoring.
 import sys, time, json, subprocess, urllib.request, datetime, os
+import json
+def _seat_url():
+    if os.environ.get("ORGANS_SEAT_URL"): return os.environ["ORGANS_SEAT_URL"]
+    for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"), os.path.expanduser("~/organs.json")):
+        try:
+            v = json.load(open(_q, encoding="utf-8")).get("seat_url")
+            if v: return v
+        except Exception: pass
+    return "http://127.0.0.1:8080"  # portable default: no baked estate port (wave-4 F-12)
+_SEAT = _seat_url().rstrip('/')
 
 secs = int(sys.argv[1]) if len(sys.argv) > 1 else 900
 label = sys.argv[2] if len(sys.argv) > 2 else "sit"
@@ -44,7 +54,7 @@ def _nvidia_raw():
 def metrics():
     # 0.2.13 body door: /api/health JSON (engine{} /metrics era retired, C5-16484)
     try:
-        h = json.loads(urllib.request.urlopen("http://127.0.0.1:47831/api/health", timeout=3).read().decode())
+        h = json.loads(urllib.request.urlopen(_SEAT + "/api/health", timeout=3).read().decode())
         eng = (h.get("engine") or {})
         return ["ok=%s" % h.get("ok"), "uptime=%s" % h.get("uptimeSec"),
                 "clients=%s" % h.get("clients"), "engine_slot=%s" % eng.get("status")]

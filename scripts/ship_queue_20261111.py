@@ -95,7 +95,8 @@ if DEDUP: raise SystemExit(0)
 me = http("/api/me"); me = me.get("me") or me
 rem = (me.get("today") or {}).get("comments_remaining")
 if rem is None:
-    print("QUOTA DOOR UNREADABLE (no comments_remaining on /api/me): writing blind, door will 429-refuse", flush=True)
+    print("QUOTA DOOR UNREADABLE (no comments_remaining on /api/me): quota leg CLOSED -- abort WITHOUT writes (fail-closed, exit 2)", flush=True)
+    sys.exit(2)  # wave-4 F-05: writing blind was fail-open
 elif rem < len(ships):
     # LAWS #15: a quota wall is a PAUSE -- abort WITHOUT writes, exit 0 (no defect computed)
     print(f"QUOTA WALL: {rem} < chain {len(ships)} -- abort, nothing written", flush=True)
@@ -141,4 +142,6 @@ except Exception:
     raise
 _po = all(r["pair_of_eyes"] for r in recs); _mv = any(r["parent_MOVED"] for r in recs)
 print("ships landed:", len(recs), "| all pair-of-eyes:", _po, "| moved parents:", sum(1 for r in recs if r["parent_MOVED"]))
-sys.exit(0 if _po else 1)
+if not recs:  # wave-4 F-14b: zero work is not green (law 23)
+    print("NO-SHIPS landed: zero work is not green"); sys.exit(3)
+sys.exit(0 if (_po and not _mv) else 1)  # wave-4 F-04: MOVED alarm wired to the exit (was printed, unexit)

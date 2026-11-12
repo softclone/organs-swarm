@@ -28,7 +28,11 @@ SEC_FILE = _organs_sec()
 import sys, os, re, json, urllib.request
 
 SECRET_FILE = os.path.join(SEC_FILE, "1f916.json")
-RECEIPTS = os.path.join(HOME, "data/venue-replies-receipts-20261108.jsonl")
+RECEIPTS = os.path.join(HOME, "data/venue-replies-receipts-20261108.jsonl")  # legacy store (kept readable)
+# wave-4 F-03 cure: the packaged shippers write ship-post-receipt-*.json and ship-queue-receipts-*.json;
+# a fresh shop has NO legacy file. The dedup gate now reads the UNION of all stores; zero stores = gate CLOSED (fail-closed).
+import glob as _glob
+RECEIPT_STORES = [RECEIPTS] + sorted(_glob.glob(os.path.join(HOME, "data", "ship-post-receipt-*.json"))) + sorted(_glob.glob(os.path.join(HOME, "data", "ship-queue-receipts-*.json")))
 
 SCREENS = [
     ("email", re.compile(r'[\w.+-]+@[\w-]+\.[\w.-]+')),
@@ -59,34 +63,46 @@ def main():
     for name, s in flags: print(f"SCREEN: {name} -> {s}")
     dup, gate_open = [], False
     corrupt = 0
-    if gid and os.path.exists(RECEIPTS):
-        # P3 cure: typed gid compare -- the substring matcher was shape-blind both ways
-        # (string-gid rows read as fresh = fail-open; prefix collision 12-matched-123 = false ALREADY-LANDED).
-        for l in open(RECEIPTS, encoding="utf-8"):
+    stores_read = 0
+    if gid:
+        # wave-4 F-03 cure: read the UNION of ALL receipt stores (legacy jsonl + ship-post-receipt-*.json
+        # + ship-queue-receipts-*.json); .jsonl rides lines, .json rides dict/list. Zero readable stores
+        # = gate CLOSED (fail-closed), never a silent fresh.
+        for _rp in RECEIPT_STORES:
+            if not os.path.exists(_rp):
+                continue
+            stores_read += 1
             try:
-                rec = json.loads(l)
-            except json.JSONDecodeError:
-                # Cure wave 2 (C5-16492): a torn receipts line is NOT skippable -- its gid is
-                # unknowable, so the ship-once gate cannot certify freshness. Counted, disclosed,
-                # gate CLOSED. (N1 claimed 'crashes CLOSED'; the swallowed continue was fail-open.)
+                if _rp.endswith(".jsonl"):
+                    _recs = []
+                    for l in open(_rp, encoding="utf-8"):
+                        try:
+                            _recs.append(json.loads(l))
+                        except json.JSONDecodeError:
+                            # Cure wave 2 (C5-16492): torn receipt line = gid space unknowable, gate CLOSED.
+                            corrupt += 1
+                else:
+                    d = json.load(open(_rp, encoding="utf-8"))
+                    _recs = d if isinstance(d, list) else [d]
+            except (OSError, json.JSONDecodeError):
                 corrupt += 1
                 continue
-            g = rec.get("gid")
-            # N1 cure (child deleg_238c7f9a, 2026-11-11): try/except pass around the gid compare was
-            # a fail-open SHAPE on the ship-once gate (a thrown compare skipped a dup row). No try:
-            # the compare is total on JSON-native values; if it ever throws, the preflight crashes
-            # CLOSED, which is exactly where a ship gate belongs.
-            if g == gid or str(g) == str(gid):
-                dup.append(l)
+            for rec in _recs:
+                if not isinstance(rec, dict):
+                    corrupt += 1
+                    continue
+                g = rec.get("gid") or rec.get("pin")  # queue stores ride pins; gid/pin both count
+                # P3/N1 cures kept: typed compare, total, crash-closed on any throw.
+                if g == gid or str(g) == str(gid):
+                    dup.append(_rp)
         if corrupt:
             gate_open = True
-            print(f"SHIP-ONCE: {corrupt} torn receipt line(s) -- gid space unknowable, gate CLOSED (fail-closed)")
-        print(f"SHIP-ONCE: gid={gid} receipts={len(dup)} -> {'ALREADY LANDED, SKIP' if dup else 'fresh'}")
-    elif gid:
-        # P2 cure: missing/unreadable receipts file disabled the gate SILENTLY (exit 0, no SHIP-ONCE line).
-        # The ship-once gate fails CLOSED: no ledger, no pass.
-        gate_open = True
-        print(f"SHIP-ONCE: gid={gid} receipts UNREADABLE at {RECEIPTS} -> gate CLOSED (fail-closed)")
+            print(f"SHIP-ONCE: {corrupt} torn/unreadable receipt item(s) -- gid space unknowable, gate CLOSED (fail-closed)")
+        if stores_read == 0:
+            gate_open = True
+            print(f"SHIP-ONCE: gid={gid} NO receipt stores readable -- gate CLOSED (fail-closed, no silent fresh)")
+        else:
+            print(f"SHIP-ONCE: gid={gid} stores={stores_read} receipts={len(dup)} -> {'ALREADY LANDED, SKIP' if dup else 'fresh'}")
     quota_ok = True
     try:
         secret = json.load(open(SECRET_FILE, encoding="utf-8"))["secret"]
@@ -117,7 +133,7 @@ def main():
     KEYSHAPES = {"bearer-secret", "long-token", "invisible-unicode", "ansi"}
     flags_key = [f for f in flags if f[0] in KEYSHAPES]
     flags_contact = [f for f in flags if f[0] not in KEYSHAPES]
-    if locals().get("today") is None:
+    if not locals().get("today"):  # wave-4 F-02: {} (empty counters) is ALSO unreadable, not just None
         quota_ok = False  # F-16 cure: door answered WITHOUT counters = unreadable = quota leg CLOSED
         print("QUOTA: door answered without today-counters -- unreadable, quota leg CLOSED (fail-closed)")
     if hy and flags:

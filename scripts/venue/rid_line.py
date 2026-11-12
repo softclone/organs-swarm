@@ -22,7 +22,8 @@ def gen():
     # audit cure 2026-11-11 (child F, deleg_a108cd5e): stdlib uuid4 = full 122-bit independent entropy;
     # the old construction reused H[9:12] in segment 3 (correlated nibbles, ~108 bits).
     R = str(uuid.uuid4())   # lowercase, version-4, variant-8/9/a/b by construction
-    assert _STRICT.match(R), "generator broke its own shape"
+    if not _STRICT.match(R):  # wave-4 F-16: law 21 -- gate is code, not assert
+        print("generator broke its own shape"); raise SystemExit(2)
     return R
 
 def valid(R):

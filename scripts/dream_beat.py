@@ -101,7 +101,13 @@ def main():
         merged[merged_key] = n
     copy.close()
     live.commit(); live.close()
-    print(f"dream-beat {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} | {verdict} | merged {merged} | {time.time()-t0:.1f}s | swift")
+    _h = os.environ.get("ORGANS_HANDLE")
+    for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"), os.path.expanduser("~/organs.json")):
+        if _h: break
+        try:
+            _h = json.load(open(_q, encoding="utf-8")).get("handle")
+        except Exception: pass
+    print(f"dream-beat {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} | {verdict} | merged {merged} | {time.time()-t0:.1f}s | {_h or 'organ'}")
 
 if __name__ == "__main__":
     main()

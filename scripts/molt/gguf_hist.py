@@ -25,11 +25,15 @@ if not p:
     print("GGUF-UNCONFIGURED: pass a .gguf path as argv (or set ORGANS_GGUF_FILE) -- exit 2, this rig parses the file you point it at")
     sys.exit(2)
 f = open(p, "rb")
-assert f.read(4) == b"GGUF", "NOT A GGUF (magic): " + p
+if f.read(4) != b"GGUF":  # wave-4 F-06: gate is CODE (assert side-effect vanishes under -O)
+    print("NOT A GGUF (magic):", p); sys.exit(2)
 _ver = struct.unpack("<I", f.read(4))[0]
 n_tensors = struct.unpack("<Q", f.read(8))[0]
+if n_tensors == 0:  # wave-4 F-14: a zero-tensor file is not a walk (law 23: zero work is not green)
+    print("ZERO tensors in header: refusing (exit 2)"); sys.exit(2)
 n_kv = struct.unpack("<Q", f.read(8))[0]
-assert _ver >= 3, f"GGUF version {_ver} < 3: KV grammar differs"
+if _ver < 3:  # wave-4 F-06b: code gate, not assert
+    print(f"GGUF version {_ver} < 3: KV grammar differs"); sys.exit(2)
 
 def _rd_str():
     ln = struct.unpack("<Q", f.read(8))[0]
@@ -69,16 +73,20 @@ for _ in range(n_kv):
         alignment = int(val)
 _hdr_end = f.tell()
 
-# SELF-ANCHORING walk (RCO proof-fire 2026-11-12, swift seat model C:/code/Strata-data/models/
-# swift-IQ3_XXS): the tensor-info start is writer-dependent -- llama.cpp places it directly at KV
+# SELF-ANCHORING walk (RCO proof-fire 2026-11-12, guest seat model (operator-supplied path) 
+# split file): the tensor-info start is writer-dependent -- llama.cpp places it directly at KV
 # end; RCO-split writers pad a few bytes; older tooling aligned it. Records are CONTIGUOUS (gguf
 # spec: tensor info carries no per-record padding -- the old 8-byte stride was a Qwen-era fiction
 # that only survived because that writer padded names). The rig probes: from KV end, try each
 # offset in the first 4 KiB, walk ALL n_tensors records contiguously, accept the first anchor
+# wave-4 F-15: alignment gate at PARSE time (was below the anchor walk: alignment 0 reached the
+# walk's arithmetic and died as NO-ANCHOR rc1 before the gate could speak).
+if not (1 <= alignment <= 1048576) or (alignment & (alignment - 1)):  # wave-4 F-15: alignment 0 ZeroDivision, 3 = nonsense; power-of-2 in range
+    print(f"NONSENSE general.alignment={alignment}: refusing (exit 2)"); sys.exit(2)
 # that walks clean. The data blob starts at align(end-of-table, alignment).
 def _walk(anchor, grammar):
     # grammar A = llama.cpp gguf: name(u64len) nd(u32) ty(u32) off(u64) dims(u64 x nd)
-    # grammar B = RCO split writer (proof-decoded 2026-11-12 on swift seat model byte-by-byte):
+    # grammar B = RCO split writer (proof-decoded 2026-11-12 on guest seat model byte-by-byte):
     #             name(u64len) nd(u32) dims(u64 x nd) ty(u64) off(u32)
     f.seek(anchor)
     prev = -1; mono = True; tys = []; infos = []
@@ -89,7 +97,7 @@ def _walk(anchor, grammar):
         return struct.unpack(fmt, b)[0]
     for i in range(n_tensors):
         l = _rd("<Q")
-        if l is None or not 4 <= l <= 80: return None
+        if l is None or not 1 <= l <= 80: return None  # wave-4 F-07: 1-char tensor names are legal; 4 was writer habit
         name = f.read(l)
         if len(name) < l or not all(32 <= c < 127 for c in name): return None
         nd = _rd("<I")
@@ -102,7 +110,7 @@ def _walk(anchor, grammar):
             dims = [_rd("<Q") for _ in range(nd)]
             flags = _rd("<Q"); off = _rd("<I")
             # RCO/ik_llama imatrix writer packs the ggml type in a byte of the u64 field; the
-            # byte position is per-record (proof-decode 2026-11-12 swift seat model: rec0 type 13
+            # byte position is per-record (proof-decode 2026-11-12 guest seat model: rec0 type 13
             # = Q5_K in the TOP byte, rec5 = token_embd type 21 = IQ4_XS in the LOW byte; the
             # remaining bits are quant-data/size metadata). Heuristic, disclosed: take the TOP byte
             # when it is a valid ggml type, else the LOW byte; refuse if neither is.
@@ -111,7 +119,7 @@ def _walk(anchor, grammar):
             ty = t_hi if t_hi < 64 else (t_lo if t_lo < 64 else None)
             if ty is None or off is None: return None
         # dims gate: RCO writers put byte-sizes in embedding dims (per_layer_token_embd carries
-        # dims[1]=320,001,536 on the swift seat model) -- bound is u32-range, not shop-sized 10M
+        # dims[1]=320,001,536 on the guest seat model) -- bound is u32-range, not shop-sized 10M
         if any(d is None or not (0 < d < 2**32) for d in dims): return None
         if off < prev: mono = False
         prev = max(prev, off)
@@ -130,6 +138,8 @@ if anchor is None:
     print(f"NO-ANCHOR: no clean {n_tensors}-record walk in grammar A/B within 4096 of KV end {_hdr_end} -- exit 1 (table grammar unknown, not guessed)")
     sys.exit(1)
 pos, mono, tys, infos = res
+if not (1 <= alignment <= 1048576) or (alignment & (alignment - 1)):  # wave-4 F-15: alignment 0 ZeroDivision, 3 = nonsense; power-of-2 in range
+    print(f"NONSENSE general.alignment={alignment}: refusing (exit 2)"); sys.exit(2)
 data_start = (pos + alignment - 1) // alignment * alignment
 print(f"header: n_tensors={n_tensors} n_kv={n_kv} alignment={alignment} table_start={anchor} (KV end {_hdr_end}, pad {anchor - _hdr_end}) grammar={grammar} data_start={data_start}")
 types = Counter(tys)

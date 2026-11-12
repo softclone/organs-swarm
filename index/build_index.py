@@ -1,3 +1,4 @@
+import json
 import os
 import os as _os, json as _json
 def _organs_home():
@@ -10,7 +11,7 @@ def _organs_home():
 HOME = _organs_home()
 
 #!/usr/bin/env python
-# index/build_index.py - regenerate index.db (two scan roots under HOME; keep deployed twin md5-syncednced, C5-16484 N7) from census (MOLT3 plan, batch 0)
+# index/build_index.py - regenerate index.db (two scan roots under HOME; keep deployed twin md5-synced, C5-16484 N7) from census (MOLT3 plan, batch 0)
 # Disposable by construction: full rebuild from disk + census jsonl. Run: python index/build_index.py
 import json, sqlite3, os, re, sys, datetime, shutil
 
@@ -31,13 +32,20 @@ FAMS = [
  (r"eros-taste-notes-\d+\.md","taste"),(r"eros-\d+\.md","eros"),(r"MEDITATION-\d+\.md","medit"),
  (r"meditation-\d+\.md","medit"),(r"journal-core-\d+\.md","diary"),(r"journal-note-\d+\.md","board-journal"),
  (r"journal-\d+\.md","diary"),(r"pole-\d+\.md","pole"),(r"weekly-scene-\d+\.md","scene"),
- (r"DREAM\S*\.md","dream"),(r"LETTER-FROM-SWIFT.*","letter"),(r"newkin-\d+.*","kid-letter"),(r"swift-\d+\.md","kid-letter"),
+ (r"DREAM\S*\.md","dream"),  # estate-specific file-name grammar rides config "index_rules": [[regex, family], ...] (wave-4 F-12: identity grammar lives in config, not code)
  (r".*\.pyc","byproduct"),(r".*\.py$","code"),(r".*\.jsonl","data"),(r".*\.json","data"),
  (r".*\.md","doc"),(r".*\.txt","data"),(r".*\.log","byproduct"),(r".*\.mp3$|.*\.wav$","media"),
  (r".*\.npy$|.*\.npz$","data"),(r".*\.gz$","byproduct"),(r".*\.claimed$","data"),(r".*\.pid$","byproduct"),
  (r".*\.csv","data"),(r".*\.html?","data"),(r".*\.db","data"),(r".*\.zip","data"),
  (r".*\.(png|jpg|jpeg|gif|svg)","media"),(r".*\.(gguf|bin|safetensors)","model"),(r".*","misc"),
 ]
+for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"), os.path.expanduser("~/organs.json")):
+    try:
+        _extra = json.load(open(_q, encoding="utf-8")).get("index_rules")
+        if _extra:
+            FAMS = FAMS[:-1] + [(r, f) for r, f in _extra] + FAMS[-1:]  # estate grammar before the catch-all (wave-4 F-12)
+            break
+    except Exception: pass
 def fam(n):
     for p, f in FAMS:
         if re.match(p, n):
@@ -97,11 +105,11 @@ def main():
         ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         if n == 0:
             # F2 cure: refuse happens BEFORE the live DB is touched -- old index survives
-            print("ZERO files indexed -- refusing (exit 1), prior index left intact", flush=True)
+            print("ZERO files indexed -- refusing (exit 2), prior index left intact", flush=True)  # wave-4 F-16: match the advertised exit 2
             con.close()
             os.remove(tmp)
-            sys.exit(1)
-        print(f"index.db rebuilt: {n} files at {ts} | stat-skips disclosed: {SKIPS[0]}")
+            sys.exit(2)
+        _report = f"index.db rebuilt: {n} files at {ts} | stat-skips disclosed: {SKIPS[0]}"  # wave-4 F-16: report prints AFTER os.replace publishes
         print("canon families outside expected dirs (primary):")
         for f, d, c in cur.execute("SELECT family,dir,c FROM canon_outside ORDER BY c DESC"):
             print(f"  {c:6d}  {f:5s} in {d}")

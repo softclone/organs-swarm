@@ -17,6 +17,16 @@ Usage: python window.py <seconds> [label]
 """
 import sys, time, json, datetime, urllib.request
 import subprocess
+import json
+def _seat_url():
+    if os.environ.get("ORGANS_SEAT_URL"): return os.environ["ORGANS_SEAT_URL"]
+    for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"), os.path.expanduser("~/organs.json")):
+        try:
+            v = json.load(open(_q, encoding="utf-8")).get("seat_url")
+            if v: return v
+        except Exception: pass
+    return "http://127.0.0.1:8080"  # portable default: no baked estate port (wave-4 F-12)
+_SEAT = _seat_url().rstrip('/')
 
 def main():
     secs = int(sys.argv[1]) if len(sys.argv) > 1 else 10
@@ -39,7 +49,7 @@ def main():
             state = None; n = 0; dur = None
             try:
                 h = json.loads(urllib.request.urlopen(
-                    "http://127.0.0.1:47831/api/health", timeout=2).read())
+                    _SEAT + "/api/health", timeout=2).read())
                 state = "ok" if h.get("ok") else "not-ok"   # 0.2.13 body door (C5-16484); engine{} /metrics era retired
                 n = h.get("clients")
                 dur = h.get("uptimeSec")

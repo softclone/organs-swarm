@@ -37,17 +37,35 @@ def tcp(host, port, timeout=5):
     except Exception as e:
         return f"DEAD {type(e).__name__}"
 
+import json as _json
+def _seat_url():
+    if os.environ.get("ORGANS_SEAT_URL"): return os.environ["ORGANS_SEAT_URL"]
+    for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"), os.path.expanduser("~/organs.json")):
+        try:
+            v = _json.load(open(_q, encoding="utf-8")).get("seat_url")
+            if v: return v
+        except Exception: pass
+    return "http://127.0.0.1:8080"
+_SEAT = _seat_url().rstrip("/")
+def _pipes_extra():
+    # estate-specific probes (tailnet peers) ride config "pipes_extra": [[name, url, expected], ...] -- never in the repo (wave-4 F-12)
+    for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"), os.path.expanduser("~/organs.json")):
+        try:
+            v = _json.load(open(_q, encoding="utf-8")).get("pipes_extra")
+            if v: return [(n, (lambda u=u: http(u, timeout=15)), e) for n, u, e in v]
+        except Exception: pass
+    return []
 PIPES = [
-    ("seat :47831 (host v1)", lambda: http("http://127.0.0.1:47831/v1/models"),                     "HTTP 200"),
-    ("host body /api/health", lambda: http("http://127.0.0.1:47831/api/health"),                    "HTTP 200"),
+    ("seat (config seat_url)", lambda: http(_SEAT + "/v1/models", timeout=15),                      "HTTP 200"),
+    ("seat body /api/health", lambda: http(_SEAT + "/api/health", timeout=15),                      "HTTP 200"),
     ("twin-proxy :8082",      lambda: http("http://127.0.0.1:8082/v1/models"),                     "HTTP 200"),
     ("embed :8081",           lambda: http("http://127.0.0.1:8081/v1/models"),                     "HTTP 200"),
     ("honcho :8000",          lambda: http("http://localhost:8000/"),                              "HTTP 404"),
     ("lmstudio :1234",        lambda: http("http://127.0.0.1:1234/v1/models"),                     "HTTP 200"),
     ("fwd :18080",            lambda: http("http://127.0.0.1:18080/v1/models", timeout=15),       "HTTP 200"),
     ("fwd :18082 (tcp)",      lambda: tcp("127.0.0.1", 18082),                                    "TCP-OPEN"),
-    ("kid :7340",             lambda: http("http://100.77.72.114:7340/", timeout=15),             "HTTP 401"),
-]
+
+] + _pipes_extra()
 
 # audit cure (deleg_eb3541f7, 2026-11-11): 'date -u' is not a Windows exe -- the sweep survived only
 # via git's bundled usr/bin on PATH; a PATH change = FileNotFoundError, sweep dies before any probe.

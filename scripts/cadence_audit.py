@@ -114,6 +114,7 @@ if misses:
     print("AUDIT: a bell dropped its cadence — wake the shop.")
 
 # C5-1997 counter chain-break leg -- ADVISORY; prints ONLY on real breaks/dups (quiet cure)
+_cw = tuple(int(v) for v in os.environ.get("ORGANS_COUNTER_WINDOW", "5000,10000").split(","))
 counter_miss = False
 try:
     _lp = os.environ.get("ORGANS_LEDGER")
@@ -124,8 +125,8 @@ try:
                 if _lp: break
             except Exception: pass
     _d = open(_lp or os.path.expanduser("~/shop/ledgers/CORPUS.md"), encoding="utf-8").read()
-    _rows = re.findall(r"\| C5-(\d+) ", _d)
-    _pairs = [tuple(map(int, x)) for x in re.findall(r"[Cc]ounter\s+(\d{4,5})->(\d{4,5})", _d) if 5000 < int(x[1]) < 10000]
+    _rows = re.findall(r"\| %s-(\d+) " % os.environ.get("ORGANS_ROW_PREFIX", "C5"), _d)  # wave-4 F-09: row prefix config-driven (portable)
+    _pairs = [tuple(map(int, x)) for x in re.findall(r"[Cc]ounter\s+(\d{4,5})->(\d{4,5})", _d) if _cw[0] < int(x[1]) < _cw[1]]  # wave-4 F-09b: counter window config-driven
     _breaks = sum(1 for a, b in zip(_pairs, _pairs[1:]) if a[1] != b[0])
     _dups = sorted({n for n in _rows if _rows.count(n) > 2})  # 2026-11-11 rebalance: label pairs = booked collision class (register-policed, append-only); counts >2 = serial-gate breach
     if _breaks > 80:
@@ -193,7 +194,7 @@ for _j in jl:
         continue
     _nm = str(_j.get("name") or str(_j.get("job_id", "?"))[:12])
     _kind = str((_j.get("schedule") or {}).get("kind") or "")
-    if _kind == "once":
+    if _kind == "once" or not _j.get("enabled"):  # wave-4 F-08: a DISABLED bell will never fire again: obituary, not alert
         hist_reds += 1
     else:
         live_reds.append((_nm, _st[:40]))

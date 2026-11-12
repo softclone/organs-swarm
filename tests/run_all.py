@@ -60,7 +60,7 @@ def run_rig(rig_path, router, files=None, argv=None, env=None):
     sys.argv = ["rig.py"] + (argv or [])
     try:
         with contextlib.redirect_stdout(buf):
-            exec(compile(src, rig_path, "exec"), {"__name__": "__main__"})
+            exec(compile(src, rig_path, "exec"), {"__name__": "__main__", "__file__": rig_path})
     except SystemExit as e:
         code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
     except Exception as e:
@@ -113,8 +113,11 @@ for p in py_files():
     t = open(p, encoding="utf-8").read()
     hits = []
     if re.search(r'[Cc]:[/\\\\][Uu]sers[/\\\\][Uu]ser', t): hits.append("winpath")
-    for idn in ("shop3", "shop2", "swift-lantern"):
+    for idn in ("shop3", "shop2", "swift-lantern", "newkin"):
         if idn in t: hits.append(idn)
+    if re.search(r"[bs]w" + r"ift\b", t): hits.append("bare-handle")  # split literal: the scanner must not match its own pattern text
+    if re.search(r":47[0-9]{3}\b", t): hits.append("estate-port")
+    if re.search(r"\b100\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", t): hits.append("tailnet-ip")
     if re.search(r'[A-Za-z0-9+/]{40,}=', t): hits.append("long-token")
     if hits: res[os.path.basename(p)] = hits
 record("portability-residue", not res, json.dumps(res)[:120])
@@ -252,7 +255,7 @@ c2, o2 = 0, ""
 src2 = open(bi, encoding="utf-8").read(); buf = io.StringIO()
 try:
     with contextlib.redirect_stdout(buf):
-        exec(compile(src2, bi, "exec"), {"__name__": "__main__"})
+        exec(compile(src2, bi, "exec"), {"__name__": "__main__", "__file__": bi})
 except SystemExit as e: c2 = e.code if isinstance(e.code, int) else 1
 except Exception as e: c2 = 90; buf.write(repr(e))
 o2 = buf.getvalue()
@@ -267,18 +270,18 @@ def router_pf(p, req):
             "now_utc": "2026-11-12T00:00:00Z"}
 body_clean = "Kin note: see https://1f916.ai/api/surface — numbers only.\n"
 bp = os.path.join(tempfile.mkdtemp(prefix="pf_"), "body.md"); open(bp, "w").write(body_clean)
-code, out, tree, calls, _ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n", "data/venue-replies-receipts-20261108.jsonl": ""}, argv=[bp, "test-ship", "gid-test"])
+code, out, tree, calls, _ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n", "data/venue-replies-receipts-20261108.jsonl": ""}, argv=[bp, "gid-test"])
 record("preflight-clean-pass", code == 0 and "PASS" in out, f"rc={code} " + out.strip()[-80:])
 body_leak = "key shape: " + "A"*40 + "=\n"
 bp2 = os.path.join(tempfile.mkdtemp(prefix="pf_"), "b2.md"); open(bp2, "w").write(body_leak)
-code, out, *_ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n"}, argv=[bp2, "test-ship2", "gid-test2"])
+code, out, *_ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n"}, argv=[bp2, "gid-test2"])
 record("preflight-screen-hard", code == 1, out.strip()[-70:])
 # torn receipt line beside a fresh gid: gate must CLOSE (wave-2 cure: continue-swallow = fail-open)
 code, out, *_ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n",
     RCV: '{"gid": "gid-test3", "cid": 1\n'}, argv=[bp, "test-ship3", "gid-test3"])
 record("preflight-torn-receipt-closes-gate", code == 1 and "BLOCK" in out, out.strip()[-70:])
 # missing receipt file = gate CLOSED (fail-closed by design)
-code, out, *_ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n"}, argv=[bp, "test-ship4", "gid-test4"])
+code, out, *_ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n"}, argv=[bp, "gid-test4"])
 record("preflight-missing-receipt-closes-gate", code == 1 and "gate CLOSED" in out, out.strip()[-70:])
 
 # ---------- 11b. audit wave 3 (deleg_b499ec12): T-02 shipper firings, T-03 real door shell,
@@ -351,7 +354,7 @@ open(os.path.join(os.environ["ORGANS_HOME"], QF), "w", encoding="utf-8").write(q
 sys.argv = ["rig.py"]
 try:
     with contextlib.redirect_stdout(buf2):
-        exec(compile(src_sq, sq, "exec", optimize=2), {"__name__": "__main__"})
+        exec(compile(src_sq, sq, "exec", optimize=2), {"__name__": "__main__", "__file__": sq})
 except SystemExit as e: c_o = e.code if isinstance(e.code, int) else 1
 record("ship-queue-gates-survive-O", c_o == 2 and "GATE:" in buf2.getvalue(), f"rc={c_o} " + buf2.getvalue().strip()[:60])
 
@@ -375,9 +378,9 @@ def router_pf_real(p, req):
                    "lifetime": {}, "now_utc": "2026-11-12T00:00:00Z"}}
 def router_pf_notoday(p, req):
     return {"me": {"handle": "tester"}}
-code, out, *_ = run_rig(pf, router_pf_real, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n", RCV: ""}, argv=[bp, "test-shipR", "gidR"])
+code, out, *_ = run_rig(pf, router_pf_real, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n", RCV: ""}, argv=[bp, "gidR"])
 record("preflight-real-shell-pass", code == 0 and "PASS" in out, f"rc={code} " + out.strip()[-70:])
-code, out, *_ = run_rig(pf, router_pf_notoday, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n"}, argv=[bp, "test-shipNT", "gidNT"])
+code, out, *_ = run_rig(pf, router_pf_notoday, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n"}, argv=[bp, "gidNT"])
 record("preflight-no-counters-hardblocks", code == 1 and "quota leg CLOSED" in out, out.strip()[-70:])
 
 # F-12: gguf rig PARSES its header -- synthetic GGUF fixture built in-test (alignment 32, 1 tensor)
@@ -452,9 +455,9 @@ def _cad(name, jobs_obj, want_rc, want_in, want_not=()):
     _out = _r.stdout + _r.stderr
     record("cadence-" + name, _r.returncode == want_rc and all(x in _out for x in want_in) and all(x not in _out for x in want_not),
            "rc=%d | %s" % (_r.returncode, _out[:90]))
-_cad("clean-green", [{"name": "a", "script": "", "schedule": {"kind": "interval", "minutes": 10}, "last_status": "ok"}], 0, (), ("BELL CENSUS",))
-_cad("live-red-alert", [{"name": "dream", "script": "", "schedule": {"kind": "interval", "minutes": 10}, "last_status": "error"}], 1, ("BELL CENSUS RED", "LIVE-RED: dream"))
-_cad("oneshot-red-advisory", [{"name": "old", "script": "", "schedule": {"kind": "once", "run_at": "2026-01-01T00:00:00"}, "last_status": "error"}], 0, ("one-shot reds",), ("LIVE-RED",))
+_cad("clean-green", [{"name": "a", "script": "", "enabled": True, "schedule": {"kind": "interval", "minutes": 10}, "last_status": "ok"}], 0, (), ("BELL CENSUS",))
+_cad("live-red-alert", [{"name": "dream", "script": "", "enabled": True, "schedule": {"kind": "interval", "minutes": 10}, "last_status": "error"}], 1, ("BELL CENSUS RED", "LIVE-RED: dream"))
+_cad("oneshot-red-advisory", [{"name": "old", "script": "", "enabled": True, "schedule": {"kind": "once", "run_at": "2026-01-01T00:00:00"}, "last_status": "error"}], 0, ("one-shot reds",), ("LIVE-RED",))
 
 
 # --- dream_beat red-path tests (2026-11-12; sandboxed env pins: NO real store, NO WSL fire) ---
@@ -478,6 +481,110 @@ import sqlite3 as _s3
 _sdp = os.path.join(tempfile.mkdtemp(), "live.db")
 _c = _s3.connect(_sdp); _c.execute("CREATE TABLE journal_entries(id TEXT)"); _c.execute("CREATE TABLE beliefs(id TEXT)"); _c.commit(); _c.close()
 _dream("placeholder-rejection", _sdp, "/mnt/c/USERshop/x.sh", 2, ("DREAM-SH-UNCONFIGURED",))
+
+
+# ============ wave-4 (deleg_4fbe40ed, 2026-11-12): cures proven, coverage gaps closed ============
+import datetime as _dt4
+# F-08: disabled red bell = obituary, not alert
+_cad("disabled-red-obituary", [{"name": "gone", "script": "", "enabled": False,
+      "schedule": {"kind": "interval", "minutes": 10}, "last_status": "error"}],
+     0, ("one-shot reds",), ("LIVE-RED",))
+# misses leg exercised: scheduled interval bell with stale last_run_at must MISS and alert
+_stale = (_dt4.datetime.now(_dt4.timezone.utc) - _dt4.timedelta(hours=10)).isoformat()
+_cad("cadence-miss-alert", [{"name": "missed", "script": "", "enabled": True, "state": "scheduled",
+      "schedule": {"kind": "interval", "minutes": 10, "display": "every 10m"}, "last_status": "ok", "last_run_at": _stale}],
+     1, ("CADENCE AUDIT", "MISS:"))
+# F-13b: full-silence clean fixture (good ledger, fresh firings, green bells => empty stdout, rc 0)
+def _silence4():
+    _td = tempfile.mkdtemp()
+    _now = _dt4.datetime.now(_dt4.timezone.utc)
+    json.dump({"jobs": [{"name": "a", "script": "", "enabled": True, "state": "scheduled",
+               "schedule": {"kind": "interval", "minutes": 10, "display": "every 10m"}, "last_status": "ok",
+               "last_run_at": _now.isoformat()}]}, open(os.path.join(_td, "jobs.json"), "w"))
+    open(os.path.join(_td, "ledger.md"), "w", encoding="utf-8").write(
+        "| C5-1 | t | mint | Counter 7134->7135 |\n| C5-2 | t | mint | Counter 7135->7136 |\n")
+    with open(os.path.join(_td, "firings.jsonl"), "w", encoding="utf-8") as fh:
+        for k in range(4):
+            fh.write(json.dumps({"name": "a", "ts": _dt4.datetime.fromtimestamp(_now.timestamp() - k * 600, _dt4.timezone.utc).isoformat()}) + "\n")
+    r = subprocess.run([sys.executable, os.path.join(REPO, "scripts", "cadence_audit.py")], capture_output=True, text=True, timeout=120,
+        env=dict(os.environ, ORGANS_JOBS=os.path.join(_td, "jobs.json"), ORGANS_LEDGER=os.path.join(_td, "ledger.md"),
+                 ORGANS_BELL_FIRINGS=os.path.join(_td, "firings.jsonl"), ORGANS_HOME=_td, ORGANS_TZ_OFFSET="-6"))
+    record("cadence-clean-full-silence", r.returncode == 0 and (r.stdout + r.stderr).strip() == "",
+           f"rc={r.returncode} out={repr((r.stdout + r.stderr)[:80])}")
+_silence4()
+# F-14b: ship_queue zero work is not green (rem ample, queue empty)
+def router_q4(p, req):
+    return {"today": {"comments_remaining": 10, "posts_remaining": 3}, "now_utc": "2026-11-12T00:00:00Z"}
+code, out, *_ = run_rig(os.path.join(REPO, "scripts", "ship_queue_20261111.py"), router_q4,
+                        {"canon/board/ship-queue-20261110.md": "no sections here\n"})
+record("ship-queue-zero-work-not-green", code == 3, f"rc={code} {out.strip()[-60:]}")
+# F-14/F-15/F-07 gguf red-paths
+_zp = os.path.join(tempfile.mkdtemp(prefix="gz_"), "zero.gguf"); mk_gguf(_zp, n_tensors=0)
+code, out, *_ = run_rig(os.path.join(REPO, "scripts/molt/gguf_hist.py"), lambda p, req: {}, {}, argv=[_zp])
+record("gguf-zero-tensors-refused", code == 2 and "ZERO tensors" in out, f"rc={code} {out.strip()[:60]}")
+_a0 = os.path.join(tempfile.mkdtemp(prefix="ga_"), "a0.gguf")
+_k = b"general.alignment"
+open(_a0, "wb").write(b"GGUF" + _st.pack("<I", 3) + _st.pack("<Q", 1) + _st.pack("<Q", 1) + _st.pack("<Q", len(_k)) + _k + _st.pack("<I", 4) + _st.pack("<I", 0) + b"\0" * 64)
+code, out, *_ = run_rig(os.path.join(REPO, "scripts/molt/gguf_hist.py"), lambda p, req: {}, {}, argv=[_a0])
+record("gguf-alignment-zero-refused", code == 2 and "NONSENSE" in out, f"rc={code} {out.strip()[:60]}")
+_bp = os.path.join(tempfile.mkdtemp(prefix="gb_"), "b.gguf")
+_kb = b"general.alignment"
+_kvb = _st.pack("<Q", len(_kb)) + _kb + _st.pack("<I", 4) + _st.pack("<I", 32)
+_hd = b"GGUF" + _st.pack("<I", 3) + _st.pack("<Q", 1) + _st.pack("<Q", 1) + _kvb
+_pos = (len(_hd) + 31) // 32 * 32
+_nm = b"w"  # F-07: single-char tensor name must parse
+_rec = _st.pack("<Q", len(_nm)) + _nm + _st.pack("<I", 1) + _st.pack("<Q", 100) + _st.pack("<Q", 13 << 8) + _st.pack("<I", 0)  # grammar B: dims, flags(top byte 13=Q5_K), off u32
+_pad = (32 - len(_rec) % 32) % 32
+open(_bp, "wb").write(_hd + b"\0" * (_pos - len(_hd)) + _rec + b"\0" * _pad + b"\0" * 64)
+code, out, *_ = run_rig(os.path.join(REPO, "scripts/molt/gguf_hist.py"), lambda p, req: {}, {}, argv=[_bp])
+record("gguf-grammar-B-green", code == 0 and "grammar=B" in out and "parsed: 1 of 1" in out, f"rc={code} {out.strip()[:80]}")
+# F-02: quota door answering today={} is unreadable = CLOSED
+code, out, *_ = run_rig(pf, lambda p, req: {"today": {}, "now_utc": "2026-11-12T00:00:00Z"},
+                        {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n", RCV: ""},
+                        argv=[bp, "gid-empty"])
+record("preflight-empty-counters-closed", code == 1 and "CLOSED" in out, f"rc={code} {out.strip()[-60:]}")
+# F-03: dedup reads the UNION stores -- a queue-receipts pin blocks re-ship
+_dupseed = json.dumps([{"pin": "gid-union", "cid": 1}])
+code, out, *_ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n",
+    "data/ship-queue-receipts-20261111.json": _dupseed}, argv=[bp, "gid-union"])
+record("preflight-union-store-dedup", code == 1 and "dup" in out, f"rc={code} {out.strip()[-60:]}")
+# F-10: ship_post screen grammar == preflight's (case-insensitive, hex40 without =)
+_hx = os.path.join(tempfile.mkdtemp(prefix="hx_"), "b.md")
+open(_hx, "w", encoding="utf-8").write("pin quote 36A8DD2614FCDEDA" + "A" * 48 + "\n")
+code, out, *_ = run_rig(os.path.join(REPO, "scripts/venue/ship_post_20261111.py"), lambda p, req: {}, {}, argv=["t", _hx])
+record("ship-post-screen-hex40", code == 2, f"rc={code} {out.strip()[:60]}")
+# F-01b: ship_post pid gate survives -O: exec optimize=2 with a door that answers WITHOUT post_id
+# (mocked urlopen -- zero real network), expect rc 2 + named refusal + NO receipt file.
+def _opid_leg():
+    _td = tempfile.mkdtemp()
+    _body = os.path.join(_td, "b.md"); open(_body, "w", encoding="utf-8").write("plain body, screens clean.\n")
+    src = open(os.path.join(REPO, "scripts", "venue", "ship_post_20261111.py"), encoding="utf-8").read()
+    class _R:
+        def read(self): return json.dumps({"ok": True}).encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    _real = urllib.request.urlopen
+    urllib.request.urlopen = lambda req, timeout=None, **kw: _R()
+    _code, _buf = None, io.StringIO()
+    _saved_argv = sys.argv
+    sys.argv = ["rig.py", "title", _body]
+    try:
+        with contextlib.redirect_stdout(_buf):
+            exec(compile(src, "ship_post.py", "exec", optimize=2), {"__name__": "__main__", "__file__": os.path.join(REPO, "scripts", "venue", "ship_post_20261111.py")})
+    except SystemExit as e:
+        _code = e.code if isinstance(e.code, int) else 1
+    finally:
+        urllib.request.urlopen = _real
+        sys.argv = _saved_argv
+    _home = os.environ.get("ORGANS_HOME", "")
+    _receipts = [f for f in os.listdir(os.path.join(_home, "data")) if "receipt" in f.lower()] if _home and os.path.isdir(os.path.join(_home, "data")) else []
+    record("ship-post-pid-gate-survives-O", _code == 2 and "NO post_id" in _buf.getvalue() and not _receipts,
+           f"rc={_code} receipts={_receipts} {_buf.getvalue().strip()[:70]}")
+_opid_leg()
+# gguf magic gate survives -O (assert side-effect cure)
+_gj = os.path.join(tempfile.mkdtemp(prefix="gj_"), "junk.gguf"); open(_gj, "w").write("junkjunkjunkjunk")
+_r = subprocess.run([sys.executable, "-O", os.path.join(REPO, "scripts/molt/gguf_hist.py"), _gj], capture_output=True, text=True, timeout=60)
+record("gguf-magic-gate-survives-O", _r.returncode == 2 and "NOT A GGUF" in (_r.stdout + _r.stderr), f"rc={_r.returncode}")
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")

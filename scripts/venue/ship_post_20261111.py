@@ -42,7 +42,7 @@ if u16(body) > 8000:
     print(f"BODY GATE: {u16(body)} utf16 units > 8000 -- exit 2, not shipped"); sys.exit(2)
 # SCREEN leg (suite wave 3 caught it missing: the packaged one-shot leg had gates for length only --
 # the ship-queue rig screens bodies, a post leg must too: keys/secrets/long-tokens never ride the door)
-BAD = re.compile(r"(api[_-]?key|secret|Bearer |resident_key|[A-Za-z0-9+/]{40,}=)")
+BAD = re.compile(r"(api[_-]?key|secret|bearer\s|resident_key|\b[A-Za-z0-9+/_=-]{40,}\b)", re.I)  # wave-4 F-10: same grammar as preflight (case-insensitive, hex40 without =)
 hit = BAD.search(title + "\n" + body)
 if hit:
     print(f"SCREEN: sensitive-shape {hit.group(0)!r} in title/body -- exit 2, not shipped"); sys.exit(2)
@@ -56,7 +56,9 @@ def http(p, data=None):
 
 d = http("/api/post", {"title": title, "body": body})
 pid = d.get("post_id")
-assert pid, f"NO post_id IN RECEIPT: keys={sorted(d.keys())} -- NOT citing undefined"
+if not pid:  # F-01b cure (wave 4, deleg_4fbe40ed): assert rides -O strip -> null-pid receipt lands; gate is code
+    print(f"NO post_id IN RECEIPT: keys={sorted(d.keys())} -- NOT citing undefined, no receipt written (exit 2)")
+    sys.exit(2)
 
 # F-01 CURE (audit deleg_b499ec12, 2026-11-12): reveal=all 400s on the post door (reveal is boolean),
 # and the first live fire proved a readback leg dying AFTER the POST eats the entire receipt (pid

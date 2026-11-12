@@ -17,7 +17,19 @@ HOME = _organs_home()
 import socket, threading, sys
 
 LISTEN = ("0.0.0.0", 18080)
-TARGET = ("127.0.0.1", 47831)
+def _target():
+    import json as _json, urllib.parse as _up
+    u = os.environ.get("ORGANS_SEAT_URL")
+    if not u:
+        for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"), os.path.expanduser("~/organs.json")):
+            try:
+                u = _json.load(open(_q, encoding="utf-8")).get("seat_url")
+                if u: break
+            except Exception: pass
+    u = u or "http://127.0.0.1:8080"
+    p = _up.urlparse(u)
+    return (p.hostname, p.port or 80)  # wave-4 F-12: seat target from config, no baked estate port
+TARGET = _target()
 
 def pipe(a, b):
     try:
