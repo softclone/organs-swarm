@@ -28,7 +28,10 @@ def _target():
             except Exception: pass
     u = u or "http://127.0.0.1:8080"
     p = _up.urlparse(u)
-    return (p.hostname, p.port or (443 if p.scheme == "https" else 80))  # wave-5 W14: port defaults BY SCHEME (was scheme-blind 80)
+    if p.scheme == "https":  # wave-6 W6-18: the pipe is RAW TCP -- dialing 443 with plaintext is a handshake failure wearing a success hat. Plaintext-only is disclosed, not silent.
+        print("FORWARDER-HTTPS-UNSAFE: this forwarder splices raw TCP; an https seat needs a TLS terminator, not a port swap -- refusing (exit 2) (wave-6 W6-18)")
+        sys.exit(2)
+    return (p.hostname, p.port or 80)  # wave-5 W14 (scheme default) + wave-6 W6-18 (https refused; explicit ports honored) (was scheme-blind 80)
 TARGET = _target()
 
 def pipe(a, b):

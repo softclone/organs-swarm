@@ -35,7 +35,11 @@ def http(p, data=None, tries=6):
             if e.code in (429, 503): time.sleep(65 if a == 0 else 120)
             else: raise
         except Exception as ex:
-            print("  net err", type(ex).__name__, p, flush=True); time.sleep(30)
+            print("  net err", type(ex).__name__, p, flush=True)
+            if data is not None:  # wave-6 W6-07: NEVER retry an ambiguous write (double-landing class, B5 proof)
+                print("WRITE-DOOR net error on", p, "-- write may have landed: verify manually, NOT retrying", flush=True)
+                raise RuntimeError("write door net error " + p) from ex
+            time.sleep(30)
     raise RuntimeError("http failed " + p)
 q = open(Q, encoding="utf-8").read()
 ships = []
@@ -63,26 +67,39 @@ for n, pid, par, body in ships:
     gate(pin, f"NO PIN for ship {n} (post {pid}): chain coverage broken")
     gate(pin[0] == pid, f"PIN POST MISMATCH ship {n}: pin post {pin[0]} != parsed post {pid}")
     gate(pin[1] == dg, f"INTENT DIGEST MISMATCH ship {n} post {pid}: parsed body != pinned intent")
-if PINS: raise SystemExit(0)
-BAD = re.compile(r"\b(api[_-]?key|secret|bearer\s|resident_key|\b[A-Za-z0-9+/_=-]{40,}\b)", re.I)  # wave-4 F-10: unified with preflight (case-insensitive, hex40 no =)
+# wave-6 W6-05 (W6-04/W6-20): the queue runs the FULL preflight screen list, imported from ONE
+# shared source of truth (scripts/screen.py) -- queue/ship_post/preflight grammar can no longer drift.
+import sys as _sys6, os as _os6
+_sys6.path.insert(0, _os6.path.dirname(_os6.path.abspath(__file__)))
+import screen as _screen
 for n, pid, par, body in ships:
-    hit = BAD.search(body)
-    # gate() messages evaluate EAGERLY (unlike assert, whose message is lazy) -- attribute access on
-    # a may-be-None hit must sit inside the firing branch, never in the message of a passing call.
-    if hit: gate(False, f"sensitive-shape {hit.group(0)!r} in ship {n} body")
+    for sname, spat in _screen.SCREENS:
+        # gate() messages evaluate EAGERLY (unlike assert, whose message is lazy) -- attribute access on
+        # a may-be-None hit must sit inside the firing branch, never in the message of a passing call.
+        hit = spat.search(body)
+        if hit: gate(False, f"sensitive-shape {sname} {hit.group(0)!r} in ship {n} body")
     gate(len(body.encode("utf-16-le"))//2 <= 8000, f"ship {n} body over 8000 UTF-16 units")
 # (g) PRE-SHIP DEDUP: hash each body against ALL live rows of its target thread (comments + post body)
 live = {}
 for pid in sorted(set(s[1] for s in ships)):
-    since = None; rows = []
+    since = None; rows = []; prev6 = None; pages6 = 0
     while True:
         d = http(f"/api/post/{pid}" + (f"?since={since}" if since else ""))
+        gate(isinstance(d, dict) and ("comments" in d or "has_more" in d),
+             f"DEDUP DOOR GRAMMAR UNREADABLE post {pid} (no comments/has_more keys) -- fail-closed (wave-6 W6-08)")
         rows.extend(d.get("comments") or [])
         if not d.get("has_more"): break
         since = d.get("next_since")
         gate(since is not None, f"CAP-EXIT post {pid}")
+        gate(since != prev6, f"CAP-EXIT post {pid}: NO PROGRESS, door re-served cursor {since!r} -- wave-6 W6-09")
+        pages6 += 1
+        gate(pages6 <= 200, f"CAP-EXIT post {pid}: page cap 200 -- wave-6 W6-09")
+        prev6 = since
         time.sleep(4)
-    post = (http(f"/api/post/{pid}")).get("post") or {}
+    pp6 = http(f"/api/post/{pid}")
+    gate(isinstance(pp6, dict) and "post" in pp6,
+         f"POST DOOR GRAMMAR UNREADABLE post {pid} (no post key) -- fail-closed (wave-6 W6-08)")
+    post = pp6.get("post") or {}
     hashes = {hashlib.sha256((c.get("body") or "").strip().encode("utf-8")).hexdigest() for c in rows}
     hashes.add(hashlib.sha256((post.get("body") or "").strip().encode("utf-8")).hexdigest())
     live[pid] = hashes
@@ -134,6 +151,7 @@ for n, pid, par, body in ships:
            "dedup": d.get("deduplicated"), "readback": "PENDING",
            "ts": datetime.datetime.now(datetime.timezone.utc).isoformat()}
     recs.append(rec)
+    print(f"SHIPPED ship {n} post {pid} cid {cid} -- publishing receipt (wave-6 W6-06: citation survives a publish death)", flush=True)
     _publish(recs)
     try:
         c = http(f"/api/comment/{cid}").get("comment")
@@ -152,6 +170,8 @@ for n, pid, par, body in ships:
 # F-11 cure: atomic receipt (plain write = crash mid-dump truncates the receipt chain -- and the
 # 2026-11-11 fire proved a mid-ship death loses ALL receipts). F-06 cure: pair-of-eyes False or any
 # parent MOVED is an ALARM, not a print at exit 0 (LAWS #8/#11: verdict wired to the exit).
+if not recs:  # wave-6 W6-02 (law 23 + LAWS #22): zero work is not green AND must never touch the existing receipt store
+    print("NO-SHIPS landed: zero work is not green -- existing receipts left untouched"); sys.exit(3)
 import tempfile
 _dir = os.path.join(HOME, "data"); os.makedirs(_dir, exist_ok=True)
 _fd, _tmp = tempfile.mkstemp(dir=_dir)
@@ -164,6 +184,4 @@ except Exception:
     raise
 _po = all(r["pair_of_eyes"] for r in recs); _mv = any(r["parent_MOVED"] for r in recs)
 print("ships landed:", len(recs), "| all pair-of-eyes:", _po, "| moved parents:", sum(1 for r in recs if r["parent_MOVED"]))
-if not recs:  # wave-4 F-14b: zero work is not green (law 23)
-    print("NO-SHIPS landed: zero work is not green"); sys.exit(3)
 sys.exit(0 if (_po and not _mv) else 1)  # wave-4 F-04: MOVED alarm wired to the exit (was printed, unexit)

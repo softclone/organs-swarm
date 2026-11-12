@@ -42,7 +42,12 @@ if u16(body) > 8000:
     print(f"BODY GATE: {u16(body)} utf16 units > 8000 -- exit 2, not shipped"); sys.exit(2)
 # SCREEN leg (suite wave 3 caught it missing: the packaged one-shot leg had gates for length only --
 # the ship-queue rig screens bodies, a post leg must too: keys/secrets/long-tokens never ride the door)
-BAD = re.compile(r"(api[_-]?key|secret|bearer\s|resident_key|\b[A-Za-z0-9+/_=-]{40,}\b)", re.I)  # wave-4 F-10: same grammar as preflight (case-insensitive, hex40 without =)
+# wave-6 W6-04: ONE grammar -- BAD imported from the shared screen module (scripts/screen.py),
+# byte-identical to the queue and preflight screens; leading word-boundary semantics unified.
+import sys as _sys6, os as _os6
+_sys6.path.insert(0, _os6.path.dirname(_os6.path.dirname(_os6.path.abspath(__file__))))
+import screen as _screen
+BAD = _screen.BAD  # wave-4 F-10 + wave-6 W6-04: same grammar as preflight (case-insensitive, hex40 without =)
 hit = BAD.search(title + "\n" + body)
 if hit:
     print(f"SCREEN: sensitive-shape {hit.group(0)!r} in title/body -- exit 2, not shipped"); sys.exit(2)

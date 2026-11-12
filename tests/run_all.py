@@ -463,19 +463,22 @@ if LIVE:
 
 # --- cadence census red-path tests (2026-11-12, dream-lane autopsy organ) ---
 import tempfile, subprocess
-def _cad(name, jobs_obj, want_rc, want_in, want_not=()):
+def _cad(name, jobs_obj, want_rc, want_in, want_not=(), extra_env=None):  # wave-6 W6-15: hermetic pins (extra_env), never the live estate
     _td = tempfile.mkdtemp()
     _jp = os.path.join(_td, "jobs.json")
     json.dump({"jobs": jobs_obj}, open(_jp, "w", encoding="utf-8"))
+    _ff6 = os.path.join(_td, "firings.jsonl"); open(_ff6, "w", encoding="utf-8").write("")
     _env = dict(os.environ, ORGANS_JOBS=_jp, ORGANS_LEDGER=os.path.join(_td, "missing.md"),
-               ORGANS_HOME=_td, ORGANS_SECRETS=_td, ORGANS_SHOP_DIR=_td, ORGANS_LEG_DIR="none", ORGANS_TZ_OFFSET="-6")
+               ORGANS_HOME=_td, ORGANS_SECRETS=_td, ORGANS_SHOP_DIR=_td, ORGANS_LEG_DIR="none", ORGANS_TZ_OFFSET="-6",
+               ORGANS_BELL_FIRINGS=_ff6)  # wave-6 W6-15: every path the rig resolves is pinned to the fixture
+    _env.update(extra_env or {})
     _r = subprocess.run([sys.executable, os.path.join(REPO, "scripts", "cadence_audit.py")],
                         capture_output=True, text=True, env=_env, timeout=120)
     _out = _r.stdout + _r.stderr
     record("cadence-" + name, _r.returncode == want_rc and all(x in _out for x in want_in) and all(x not in _out for x in want_not),
            "rc=%d | %s" % (_r.returncode, _out[:90]))
-_cad("clean-green", [{"name": "a", "script": "", "enabled": True, "schedule": {"kind": "interval", "minutes": 10}, "last_status": "ok"}], 0, (), ("BELL CENSUS",))
-_cad("live-red-alert", [{"name": "dream", "script": "", "enabled": True, "schedule": {"kind": "interval", "minutes": 10}, "last_status": "error"}], 1, ("BELL CENSUS RED", "LIVE-RED: dream"))
+_cad("clean-green", [{"name": "a", "script": "", "enabled": True, "schedule": {"kind": "interval", "minutes": 10, "display": "every 10m"}, "last_status": "ok"}], 0, (), ("BELL CENSUS",))
+_cad("live-red-alert", [{"name": "dream", "script": "", "enabled": True, "schedule": {"kind": "interval", "minutes": 10, "display": "every 10m"}, "last_status": "error"}], 1, ("BELL CENSUS RED", "LIVE-RED: dream"))
 _cad("oneshot-red-advisory", [{"name": "old", "script": "", "enabled": True, "schedule": {"kind": "once", "run_at": "2026-01-01T00:00:00"}, "last_status": "error"}], 0, ("one-shot/disabled reds",), ("LIVE-RED",))  # wave-5 W15: fixtures track the honest label
 
 
@@ -506,7 +509,7 @@ _dream("placeholder-rejection", _sdp, "/mnt/c/USERshop/x.sh", 2, ("DREAM-SH-UNCO
 import datetime as _dt4
 # F-08: disabled red bell = obituary, not alert
 _cad("disabled-red-obituary", [{"name": "gone", "script": "", "enabled": False,
-      "schedule": {"kind": "interval", "minutes": 10}, "last_status": "error"}],
+      "schedule": {"kind": "interval", "minutes": 10, "display": "every 10m"}, "last_status": "error"}],
      0, ("one-shot/disabled reds",), ("LIVE-RED",))  # wave-5 W15: fixtures track the honest label
 # misses leg exercised: scheduled interval bell with stale last_run_at must MISS and alert
 _stale = (_dt4.datetime.now(_dt4.timezone.utc) - _dt4.timedelta(hours=10)).isoformat()
@@ -563,10 +566,15 @@ code, out, *_ = run_rig(pf, lambda p, req: {"today": {}, "now_utc": "2026-11-12T
                         argv=[bp, "gid-empty"])
 record("preflight-empty-counters-closed", code == 1 and "CLOSED" in out, f"rc={code} {out.strip()[-60:]}")
 # F-03: dedup reads the UNION stores -- a queue-receipts pin blocks re-ship
-_dupseed = json.dumps([{"pin": "gid-union", "cid": 1}])
+_dupseed = json.dumps([{"ship": 1, "post": "gid-union", "parent_requested": 5, "comment_id": 42,
+                        "parent_attached": 5, "parent_MOVED": False, "pair_of_eyes": True,
+                        "dedup": False, "readback": "OK", "ts": "2026-11-12T00:00:00+00:00"}])  # wave-6 W6-16: REAL queue receipt grammar (ship/post/comment_id) -- the synthetic pin/cid shape hid the union blind spot for two audit generations
 code, out, *_ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n",
     "data/ship-queue-receipts-20261111.json": _dupseed}, argv=[bp, "gid-union"])
 record("preflight-union-store-dedup", code == 1 and "dup" in out, f"rc={code} {out.strip()[-60:]}")
+# wave-6 W6-16: the legacy pin/cid shape must stay in the union too (both store grammars dedup)
+code, out, *_ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |" + chr(10), "data/ship-queue-receipts-20261111.json": json.dumps([{"pin": "gid-legacy", "cid": 2}])}, argv=[bp, "gid-legacy"])
+record("preflight-union-legacy-pin-dedup", code == 1 and "dup" in out, f"rc={code} {out.strip()[-60:]}")
 # F-10: ship_post screen grammar == preflight's (case-insensitive, hex40 without =)
 _hx = os.path.join(tempfile.mkdtemp(prefix="hx_"), "b.md")
 open(_hx, "w", encoding="utf-8").write("pin quote 36A8DD2614FCDEDA" + "A" * 48 + "\n")
@@ -630,17 +638,31 @@ code, out, *_ = run_rig(pf, router_pf, {
     argv=[bp, "gid-spost"])
 record("preflight-ship-post-receipt-dedup", code == 1 and "dup" in out, out.strip()[-60:])
 
-# W14: forwarder port follows the SCHEME (https -> 443; was scheme-blind 80)
-os.environ["ORGANS_SEAT_URL"] = "https://seat.example"
-_fw5 = os.path.join(REPO, "scripts/fwd_18080.py")
-_ns5 = {"__name__": "lib", "__file__": _fw5}
-try:
-    exec(compile(open(_fw5, encoding="utf-8").read().replace(chr(13) + chr(10), chr(10)), _fw5, "exec"), _ns5)
-    _t5 = _ns5.get("TARGET")
-except Exception as _e5:
-    _t5 = "EXC " + repr(_e5)
-del os.environ["ORGANS_SEAT_URL"]
-record("fwd-https-port-443", _t5 == ("seat.example", 443), str(_t5))
+# W14 + wave-6 W6-18/W6-26: ALL THREE forwarders REFUSE https (raw-TCP pipe, named exit 2) and honor explicit http ports
+for _fw5 in ("scripts/fwd_18080.py", "scripts/strata_forward_18080.py", "scripts/twin_proxy_8082.py"):
+    _fp5 = os.path.join(REPO, _fw5)
+    _nm5 = _fw5.split("/")[-1].split(".")[0]
+    os.environ["ORGANS_SEAT_URL"] = "https://seat.example"
+    _rc5 = None; _buf5b = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(_buf5b):
+            exec(compile(open(_fp5, encoding="utf-8").read().replace(chr(13) + chr(10), chr(10)), _fp5, "exec"), {"__name__": "lib", "__file__": _fp5})
+    except SystemExit as _e5:
+        _rc5 = _e5.code if isinstance(_e5.code, int) else 1
+    except (Exception, SystemExit) as _e5:
+        _rc5 = "EXC " + repr(_e5)
+    del os.environ["ORGANS_SEAT_URL"]
+    record("fwd-https-refused-" + _nm5, _rc5 == 2 and "FORWARDER-HTTPS-UNSAFE" in _buf5b.getvalue(), "rc=" + str(_rc5) + " " + _buf5b.getvalue().strip()[:60])
+    os.environ["ORGANS_SEAT_URL"] = "http://seat.example:18081"
+    _ns5b = {"__name__": "lib", "__file__": _fp5}
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            exec(compile(open(_fp5, encoding="utf-8").read().replace(chr(13) + chr(10), chr(10)), _fp5, "exec"), _ns5b)
+        _t5b = _ns5b.get("TARGET")
+    except (Exception, SystemExit) as _e5b:
+        _t5b = "EXC " + repr(_e5b)
+    del os.environ["ORGANS_SEAT_URL"]
+    record("fwd-http-port-" + _nm5, _t5b == ("seat.example", 18081), str(_t5b))
 
 # W02: config index_rules outrank EVERY extension catch-all (.md->prose shadowed them)
 _td5 = tempfile.mkdtemp(prefix="bi5_"); _kits = os.path.join(_td5, "kitsrc", "index"); os.makedirs(_kits)
@@ -650,7 +672,7 @@ _shop5 = os.path.join(_td5, "shop"); os.makedirs(_shop5, exist_ok=True)
 _leg5 = os.path.join(_td5, "leg"); os.makedirs(_leg5, exist_ok=True)  # LEG root exists empty (rig refuses missing roots)
 open(os.path.join(_shop5, "kid-thing.md"), "w", encoding="utf-8").write("# kid" + chr(10))
 _bi5 = os.path.join(_kits, "build_index.py")
-_saved5 = os.environ.get("ORGANS_HOME"); _saved5s = os.environ.get("ORGANS_SHOP_DIR")
+_saved5 = os.environ.get("ORGANS_HOME"); _saved5s = os.environ.get("ORGANS_SHOP_DIR"); _saved5l = os.environ.get("ORGANS_LEG_DIR")  # wave-6 W6-27: LEG_DIR restored too (no env leak)
 os.environ["ORGANS_HOME"] = _td5
 os.environ["ORGANS_SHOP_DIR"] = _shop5  # the fixture's indexed root IS the scratch shop (config would resolve to the live shop)
 os.environ["ORGANS_LEG_DIR"] = _leg5
@@ -669,6 +691,8 @@ finally:
     else: os.environ["ORGANS_HOME"] = _saved5
     if _saved5s is None: os.environ.pop("ORGANS_SHOP_DIR", None)
     else: os.environ["ORGANS_SHOP_DIR"] = _saved5s
+    if _saved5l is None: os.environ.pop("ORGANS_LEG_DIR", None)
+    else: os.environ["ORGANS_LEG_DIR"] = _saved5l
 record("index-config-rules-outrank-catchall", _fam5 == [("kid-letter",)], str(_fam5))
 
 # W07 (LAWS #23): zero-content samplers refuse. Dead seat door + nvidia-smi resolving to a
@@ -684,14 +708,132 @@ for _rgs5, _args5 in (("skin_sampler.py", ["1"]), ("sit_sampler.py", ["1", "w5ze
            _r5.returncode == 1 and "ZERO-content" in _r5.stdout,
            "rc=" + str(_r5.returncode) + " " + _r5.stdout.strip()[-50:])
 
-# W08: malformed cadence env is a READER advisory -- config defect, never a bell alert, never a crash
-_r5 = subprocess.run([sys.executable, os.path.join(REPO, "scripts/cadence_audit.py")],
-                     capture_output=True, text=True, timeout=150,
-                     env=dict(os.environ, ORGANS_COUNTER_WINDOW="abc", ORGANS_TZ_OFFSET="zz"))
-_o5 = _r5.stdout + _r5.stderr
-record("cadence-malformed-env-is-reader-advisory",
-       "READER ADVISORY" in _o5 and "Traceback" not in _o5 and "BELL CENSUS" in _o5,
-       _o5[:70])
+# W08 + wave-6 W6-15: malformed cadence env is a READER advisory -- and the leg is HERMETIC now
+# (the old form inherited the live estate jobs/ledger: it passed green on THIS machine only, by accident)
+_greenjob6 = [{"name": "a", "script": "", "enabled": True, "schedule": {"kind": "interval", "minutes": 10, "display": "every 10m"}, "last_status": "ok"}]
+_cad("malformed-env-is-reader-advisory-hermetic", _greenjob6, 0, ("READER ADVISORY",), ("Traceback", "BELL CENSUS"),
+     {"ORGANS_COUNTER_WINDOW": "abc", "ORGANS_TZ_OFFSET": "zz"})
+
+# ================= WAVE-6 red-path legs (deleg_5185ca9e cure proofs, 2026-11-12) =================
+import urllib.error as _ue6
+import http.server as _hs6
+import threading as _th6
+
+# W6-02: a zero-work run must NOT clobber the existing receipt store (LAWS #22 citations survive)
+_seedrec6 = json.dumps([{"ship": 9, "post": 40, "comment_id": 99, "readback": "OK", "ts": "t"}])
+code, out, tree6, calls6, home6 = run_rig(sq, router_sq, {QF: "no ships in this queue" + chr(10),
+                                                          "data/ship-queue-receipts-20261111.json": _seedrec6})
+_pers6 = tree6.get("data/ship-queue-receipts-20261111.json")
+record("queue-zero-work-preserves-receipts", code == 3 and _pers6 == _seedrec6,
+       "rc=" + str(code) + " store=" + ("INTACT" if _pers6 == _seedrec6 else "CLOBBERED"))
+
+# W6-03: door answering ok=False (verdict flag, zero metrics) + dead nvidia = ZERO-content refusal.
+# The wave-5 W07 counter counted the state string as content; this fixture is the exact bypass shape.
+class _H6(_hs6.BaseHTTPRequestHandler):
+    def do_GET(self):
+        _b6 = json.dumps({"ok": False}).encode()
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(_b6)))
+        self.end_headers()
+        self.wfile.write(_b6)
+    def log_message(self, *a):
+        pass
+_srv6 = _hs6.HTTPServer(("127.0.0.1", 0), _H6)
+_th6.Thread(target=_srv6.serve_forever, daemon=True).start()
+_r6 = subprocess.run([sys.executable, os.path.join(REPO, "scripts/skin", "skin_sampler.py"), "1"],
+                     cwd=_nv5, capture_output=True, text=True, timeout=90,
+                     env=dict(os.environ, ORGANS_HOME=tempfile.mkdtemp(prefix="sh6_"),
+                              ORGANS_SEAT_URL="http://127.0.0.1:" + str(_srv6.server_address[1])))
+_srv6.shutdown()
+record("sampler-okFalse-shell-is-not-content", _r6.returncode == 1 and "ZERO-content" in _r6.stdout,
+       "rc=" + str(_r6.returncode) + " " + _r6.stdout.strip()[-50:])
+
+# W6-08: dedup door answering under drifted grammar (no comments/post keys) = fail-closed, never hash-empty
+def router_gram6(p, req):
+    if p.startswith("/api/post/100"):
+        return {"items": [], "has_more": False}
+    if p == "/api/me":
+        return {"me": {"handle": "tester", "today": {"comments_remaining": 8}}}
+    return {}
+code, out, *_ = run_rig(sq, router_gram6, {QF: q_green})
+record("queue-dedup-grammar-unreadable-closed", code == 2 and "GRAMMAR UNREADABLE" in out,
+       "rc=" + str(code) + " " + out.strip()[-60:])
+
+# W6-09: a door serving a constant cursor with has_more=True must NOT loop forever
+def router_noprogress6(p, req):
+    if p.startswith("/api/post/100"):
+        return {"comments": [], "has_more": True, "next_since": "s1", "post": {"body": "post body"}}
+    if p == "/api/me":
+        return {"me": {"handle": "tester", "today": {"comments_remaining": 8}}}
+    return {}
+code, out, *_ = run_rig(sq, router_noprogress6, {QF: q_green})
+record("queue-pagination-no-progress-gate", code == 2 and "NO PROGRESS" in out,
+       "rc=" + str(code) + " " + out.strip()[-60:])
+
+# W6-07: an ambiguous WRITE failure is never retried (double-landing class, B5 proof)
+_postct6 = [0]
+def router_wretry6(p, req):
+    if p.startswith("/api/post/100"):
+        return {"comments": [], "has_more": False, "post": {"body": "post body"}}
+    if p == "/api/me":
+        return {"me": {"handle": "tester", "today": {"comments_remaining": 8}}}
+    if p == "/api/comment" and req.data:
+        _postct6[0] += 1
+        raise _ue6.URLError("connection dropped after commit")
+    return {}
+code, out, *_ = run_rig(sq, router_wretry6, {QF: q_green})
+record("queue-ambiguous-write-never-retried", _postct6[0] == 1 and "NOT retrying" in out,
+       "rc=" + str(code) + " POST_attempts=" + str(_postct6[0]))
+
+# W6-04/W6-05: all three write rigs import the SAME screen module; the email shape gates the queue
+_sp6 = open(os.path.join(REPO, "scripts/venue/ship_post_20261111.py"), encoding="utf-8").read()
+_pf6 = open(os.path.join(REPO, "scripts/venue/preflight_1f916.py"), encoding="utf-8").read()
+_sq6 = open(sq, encoding="utf-8").read()
+record("screens-single-source-of-truth",
+       "_screen.BAD" in _sp6 and "_screen.SCREENS" in _pf6 and "_screen.SCREENS" in _sq6,
+       "ship_post/preflight/queue import scripts/screen.py")
+_body_em = "mail me at somebody@example.com to continue the thread"
+_dg_em = _h.sha256(_body_em.encode("utf-8")).hexdigest()
+_q_em = "## 1. post 100 parent 50" + chr(10) + _body_em + chr(10) + chr(10) + "INTENT PINS" + chr(10) + "PINDIGEST post 100 ship 1 sha256 " + _dg_em + chr(10)
+code, out, *_ = run_rig(sq, router_sq, {QF: _q_em})
+record("queue-email-body-gates-full-grammar", code == 2 and "email" in out, "rc=" + str(code) + " " + out.strip()[:60])
+
+# W6-10: config key bell_firings RELOCATES the phase leg (chain must be proven, not documented-only).
+# Drift fixture lands in the CONFIG file; HOME default holds a clean file. Advisory => config was read.
+_td6b = tempfile.mkdtemp(prefix="cc6_")
+_cad6 = os.path.join(_td6b, "cad6.py")
+shutil.copy(os.path.join(REPO, "scripts/cadence_audit.py"), _cad6)
+_drift6 = os.path.join(_td6b, "drift.jsonl")
+open(_drift6, "w", encoding="utf-8").write(
+    json.dumps({"job": "a", "last_run": "2026-11-12T00:00:00-06:00"}) + chr(10) +
+    json.dumps({"job": "a", "last_run": "2026-11-12T00:05:00-06:00"}) + chr(10) +
+    json.dumps({"job": "a", "last_run": "2026-11-12T00:10:00-06:00"}) + chr(10) +
+    json.dumps({"job": "a", "last_run": "2026-11-12T00:15:00-06:00"}) + chr(10))
+_clean6 = os.path.join(_td6b, "clean.jsonl")
+open(_clean6, "w", encoding="utf-8").write(
+    json.dumps({"job": "a", "last_run": "2026-11-12T00:00:00-06:00"}) + chr(10) +
+    json.dumps({"job": "a", "last_run": "2026-11-12T00:10:00-06:00"}) + chr(10) +
+    json.dumps({"job": "a", "last_run": "2026-11-12T00:20:00-06:00"}) + chr(10))
+open(os.path.join(_td6b, "local.json"), "w", encoding="utf-8").write(json.dumps({"bell_firings": _drift6}))
+os.makedirs(os.path.join(_td6b, "data"), exist_ok=True)
+open(os.path.join(_td6b, "data", "bell-firings.jsonl"), "w", encoding="utf-8").write(
+    json.dumps({"job": "a", "last_run": "2026-11-12T00:00:00-06:00"}) + chr(10) +
+    json.dumps({"job": "a", "last_run": "2026-11-12T00:10:00-06:00"}) + chr(10) +
+    json.dumps({"job": "a", "last_run": "2026-11-12T00:20:00-06:00"}) + chr(10))
+_jp6b = os.path.join(_td6b, "jobs.json")
+json.dump({"jobs": _greenjob6}, open(_jp6b, "w", encoding="utf-8"))
+_env6b = dict(os.environ, ORGANS_JOBS=_jp6b, ORGANS_LEDGER=os.path.join(_td6b, "missing.md"),
+             ORGANS_HOME=_td6b, ORGANS_SECRETS=_td6b, ORGANS_SHOP_DIR=_td6b, ORGANS_TZ_OFFSET="-6")
+_env6b.pop("ORGANS_BELL_FIRINGS", None)
+_r6b = subprocess.run([sys.executable, _cad6], capture_output=True, text=True, env=_env6b, timeout=120)
+_out6b = _r6b.stdout + _r6b.stderr
+record("cadence-config-bell-firings-chain", "PHASE" in _out6b, "rc=" + str(_r6b.returncode) + " " + _out6b[:90])
+
+# W6-12/W6-13/W6-21: cadence reader advisories -- out-of-range TZ, nan/abc threshold.
+# Config defect = disclosed advisory; never a bell alert, never a Traceback.
+_cad("tz-out-of-range-advisory", _greenjob6, 0, ("READER ADVISORY",), ("Traceback",), {"ORGANS_TZ_OFFSET": "25"})
+_cad("threshold-nan-advisory", _greenjob6, 0, ("READER ADVISORY",), ("Traceback",), {"CADENCE_THRESHOLD": "nan"})
+_cad("threshold-abc-advisory", _greenjob6, 0, ("READER ADVISORY",), ("Traceback",), {"CADENCE_THRESHOLD": "abc"})
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")

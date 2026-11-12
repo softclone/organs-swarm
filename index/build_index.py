@@ -42,11 +42,24 @@ FAMS = [
 for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"), os.path.expanduser("~/organs.json")):
     try:
         _extra = json.load(open(_q, encoding="utf-8")).get("index_rules")
-        if _extra:
+    except FileNotFoundError:
+        continue
+    except Exception as _e6:  # wave-6 W6-22: a config defect is a READER ADVISORY, never a silent drop
+        print("READER ADVISORY: config unreadable at", _q, "--", type(_e6).__name__)
+        continue
+    if _extra:
+        _ok6 = []  # wave-6 W6-17: patterns compile-validated at load; the walk can never throw on config grammar
+        for _ent6 in _extra:
+            try:
+                _r6, _f6 = _ent6
+                re.compile(_r6)
+                _ok6.append((_r6, _f6))
+            except (ValueError, TypeError, re.error) as _e7:
+                print("READER ADVISORY: index_rules entry malformed -- entry skipped:", repr(_ent6)[:60])
+        if _ok6:
             _cut = next((i for i, (pat, _f) in enumerate(FAMS) if pat.startswith(".*")), len(FAMS) - 1)  # wave-5 W02: config rules outrank EVERY extension catch-all, not just the final .*->misc
-            FAMS = FAMS[:_cut] + [(r, f) for r, f in _extra] + FAMS[_cut:]
-            break
-    except Exception: pass
+            FAMS = FAMS[:_cut] + _ok6 + FAMS[_cut:]
+        break
 def fam(n):
     for p, f in FAMS:
         if re.match(p, n):

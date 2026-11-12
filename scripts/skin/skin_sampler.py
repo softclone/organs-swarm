@@ -72,13 +72,15 @@ while time.time() < _t_end:
     g = gpu()
     if g[0] is not None:
         rec["temp"], rec["util"], rec["pow"] = g
-    if m:
+    if isinstance(m, dict):  # wave-6 W6-19: a truthy NON-dict payload (list shell) is an unreadable door, not content
         rec["state"] = "ok" if m.get("ok") else "not-ok"
         rec["uptime"] = m.get("uptimeSec")
         rec["clients"] = m.get("clients")
+    elif m is not None:
+        print("METRICS-ERR: payload not a dict -- row stays metric-less", flush=True)
     with open(out_path(), "a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
-    if any(v is not None for k, v in rec.items() if k != "t"):  # wave-5 W07 (LAWS #23): timestamp-only rows and all-None-read rows capture nothing
+    if any(rec.get(k) is not None for k in ("temp", "util", "pow", "uptime", "clients")):  # wave-6 W6-03 (LAWS #23): substantive METRIC fields only -- a verdict flag like state="not-ok" is not content
         _real_rows += 1
     dt = time.time() - t0
     if dt < 0.5:

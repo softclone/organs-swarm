@@ -34,23 +34,18 @@ RECEIPTS = os.path.join(HOME, "data/venue-replies-receipts-20261108.jsonl")  # l
 import glob as _glob
 RECEIPT_STORES = [RECEIPTS] + sorted(_glob.glob(os.path.join(HOME, "data", "ship-post-receipt-*.json"))) + sorted(_glob.glob(os.path.join(HOME, "data", "ship-queue-receipts-*.json")))
 
-SCREENS = [
-    ("email", re.compile(r'[\w.+-]+@[\w-]+\.[\w.-]+')),
-    ("ipv4", re.compile(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b')),
-    # Wave 2 cure (preflight live-fire 2026-11-11): 'https://...' matched as drive-letter path via
-    # 's://'. Lookbehind: a drive letter may not be preceded by a letter (kills scheme collision,
-    # keeps real home paths).
-    ("home-path", re.compile(r'(?<![A-Za-z])[A-Za-z]:[\\/][\w\\/. -]{4,}|/c/Users/[\w-]+/', re.I)),
-    ("bearer-secret", re.compile(r'(Bearer\s+[A-Za-z0-9_\-]{12,})|sk-[A-Za-z0-9]{16,}')),
-    # Wave 2 nit cure (C5-16492): unprefixed long tokens (raw secret pastes) were unscreened.
-    # Known trade: 64-char sha256 pin quotes in bodies fire this screen; the consented path is
-    # hygiene-override (disclosed), per the W5 cure's rule that false positives need a named way out.
-    ("long-token", re.compile(r'\b[A-Za-z0-9+/_=-]{40,}\b')),
-    ("invisible-unicode", re.compile(r'[\u200b-\u200f\u202a-\u202e\ufeff]')),
-    ("ansi", re.compile(r'\x1b\[')),
-]
+# wave-6 W6-04/05/20: screens imported from the ONE shared source (scripts/screen.py) -- no more
+# per-rig grammar drift. The bare word secret now screens here too (over-block direction; the
+# consented way out for a false positive is a named hygiene disclosure, never a grammar loosening).
+import sys as _sys6, os as _os6
+_sys6.path.insert(0, _os6.path.dirname(_os6.path.dirname(_os6.path.abspath(__file__))))
+import screen as _screen
+SCREENS = _screen.SCREENS
 
 def main():
+    if len(sys.argv) < 2:  # wave-6 closure: usage guard, not a bare Traceback (rig-family consistency with ship_post exit 2)
+        print("usage: preflight_1f916.py <body-file> [gid] -- exit 2")
+        sys.exit(2)
     body = open(sys.argv[1], encoding="utf-8").read()
     gid = sys.argv[2] if len(sys.argv) > 2 else None
     flags = []
@@ -91,7 +86,7 @@ def main():
                 if not isinstance(rec, dict):
                     corrupt += 1
                     continue
-                g = rec.get("gid") or rec.get("pin") or rec.get("post_id")  # wave-5 W03: ship_post receipts ride post_id -- union reads all three id fields
+                g = rec.get("gid") or rec.get("pin") or rec.get("post_id") or rec.get("post") or rec.get("comment_id")  # wave-6 W6-01: REAL queue receipts ride ship/post/comment_id -- union reads the FULL receipt grammar
                 # P3/N1 cures kept: typed compare, total, crash-closed on any throw.
                 if g == gid or str(g) == str(gid):
                     dup.append(_rp)

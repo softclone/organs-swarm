@@ -27,10 +27,26 @@ JOBS = _jobs_path()
 def _envint(name, default):  # wave-5 W08: a config defect is a reader defect; it must NEVER alert as a bell defect (header law)
     try:
         return int(os.environ.get(name, default))
-    except ValueError:
+    except (ValueError, TypeError):
         print(f"READER ADVISORY: malformed {name} -- using default {default} (config defect, not a bell defect)")
-        return int(default)
-NAIVE_TZ = datetime.timezone(datetime.timedelta(hours=_envint("ORGANS_TZ_OFFSET", "-6")))  # profile local zone; shim ORGANS_TZ_OFFSET (default -6 CST, disclosed)
+        try:
+            return int(default)
+        except (ValueError, TypeError):  # wave-6 W6-12: an unreadable default must never crash the reader
+            print(f"READER ADVISORY: default for {name} also unreadable -- using 0")
+            return 0
+def _cfgkey(key):  # wave-6 W6-10/11: config chain (local.json -> ~/organs.json) for keys the README documents; env wins at each caller
+    for _p in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"), _os.path.expanduser("~/organs.json")):
+        try:
+            v = _json.load(open(_p, encoding="utf-8")).get(key)
+            if v: return str(v)
+        except Exception: pass
+    return None
+# wave-6 W6-11: tz_offset rides the config chain; W6-12: an out-of-range offset is a READER ADVISORY, never a crash
+_tz6 = _envint("ORGANS_TZ_OFFSET", _cfgkey("tz_offset") or "-6")
+if abs(_tz6) >= 24:
+    print(f"READER ADVISORY: ORGANS_TZ_OFFSET {_tz6} outside +-24h range -- falling back to -6 (wave-6 W6-12: reader defect, never a bell alert)")
+    _tz6 = -6
+NAIVE_TZ = datetime.timezone(datetime.timedelta(hours=_tz6))  # profile local zone (default -6 CST, disclosed)
 
 def load_jobs():
     for tries in range(3):
@@ -97,11 +113,15 @@ def interval_sec(sched):
 
 defects = []
 misses = []; seen = 0
-thr = 3
+import math as _m6
+thr = 3.0
 try:
     thr = float(os.environ.get("CADENCE_THRESHOLD", 3))
+    if not _m6.isfinite(thr) or thr <= 0:
+        print("READER ADVISORY: CADENCE_THRESHOLD not a positive finite number -- using 3 (wave-6 W6-13: nan/inf silently blinds the misses leg)")
+        thr = 3.0
 except ValueError:
-    pass
+    print("READER ADVISORY: malformed CADENCE_THRESHOLD -- using 3 (wave-6 W6-21: disclosure, matching the _envint contract)")
 for j in jl:
     lr = parse(j.get("last_run_at")); nx = parse(j.get("next_run_at"))
     if not j.get("enabled") or j.get("state") not in ("scheduled",): continue
@@ -120,7 +140,7 @@ if misses:
     print("AUDIT: a bell dropped its cadence — wake the shop.")
 
 # C5-1997 counter chain-break leg -- ADVISORY; prints ONLY on real breaks/dups (quiet cure)
-_cw_raw = os.environ.get("ORGANS_COUNTER_WINDOW", "5000,10000").split(",")
+_cw_raw = (os.environ.get("ORGANS_COUNTER_WINDOW") or _cfgkey("counter_window") or "5000,10000").split(",")  # wave-6 W6-11: rides the config chain
 try:
     _cw = (int(_cw_raw[0]), int(_cw_raw[1]))
 except (ValueError, IndexError):
@@ -161,6 +181,8 @@ try:
     if _dups:
         counter_miss = True
         print("COUNTER-CHAIN DUP LABELS:", _dups[:12])
+except FileNotFoundError:
+    pass  # wave-6 W6-23: a missing ledger is the portable default -- stay quiet (README quiet law), like the INERT prefix
 except Exception as _e:
     print("counter leg: reader artifact:", type(_e).__name__)
 
@@ -170,7 +192,7 @@ try:
     import statistics as _st
     _seen = {}
     try:
-        for _l in open(os.environ.get("ORGANS_BELL_FIRINGS") or os.path.join(_home_dir(), "data", "bell-firings.jsonl"), encoding="utf-8"):
+        for _l in open(os.environ.get("ORGANS_BELL_FIRINGS") or _cfgkey("bell_firings") or os.path.join(_home_dir(), "data", "bell-firings.jsonl"), encoding="utf-8"):  # wave-6 W6-10: config key bell_firings now rides the chain
             _r = json.loads(_l)
             if _r.get("last_run"):
                 _seen.setdefault(_r["job"], set()).add(_r["last_run"])
@@ -215,7 +237,8 @@ for _j in jl:
     if _st in ("", "ok", "green", "success"):
         continue
     _nm = str(_j.get("name") or str(_j.get("job_id", "?"))[:12])
-    _kind = str((_j.get("schedule") or {}).get("kind") or "")
+    _sch6 = _j.get("schedule") if isinstance(_j.get("schedule"), dict) else {}  # wave-6 W6-14: string schedule is store drift; census mirrors the misses-leg guard
+    _kind = str(_sch6.get("kind") or "")
     if _kind == "once" or not _j.get("enabled"):  # wave-4 F-08: a DISABLED bell will never fire again: obituary, not alert
         hist_reds += 1
     else:
