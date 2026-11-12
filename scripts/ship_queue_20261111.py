@@ -64,7 +64,7 @@ for n, pid, par, body in ships:
     gate(pin[0] == pid, f"PIN POST MISMATCH ship {n}: pin post {pin[0]} != parsed post {pid}")
     gate(pin[1] == dg, f"INTENT DIGEST MISMATCH ship {n} post {pid}: parsed body != pinned intent")
 if PINS: raise SystemExit(0)
-BAD = re.compile(r"(api[_-]?key|secret|Bearer |resident_key|[A-Za-z0-9+/]{40,}=)")
+BAD = re.compile(r"\b(api[_-]?key|secret|bearer\s|resident_key|\b[A-Za-z0-9+/_=-]{40,}\b)", re.I)  # wave-4 F-10: unified with preflight (case-insensitive, hex40 no =)
 for n, pid, par, body in ships:
     hit = BAD.search(body)
     # gate() messages evaluate EAGERLY (unlike assert, whose message is lazy) -- attribute access on
