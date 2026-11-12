@@ -63,7 +63,8 @@ skipped = 0
 for p in dd.get("posts", []):
     if p.get("pinned") == 1: continue
     rid = p.get("id")
-    if rid is None:
+    rid = _sid(rid) if rid is not None else None  # F-09 CURE (deleg_b499ec12): compare the NORMALIZED
+    if rid is None:                               # id against the normalized set -- raw str-ids never dedup
         skipped += 1  # B4 cure: id-less row disclosed, never banked as None
         continue
     if rid not in ids:

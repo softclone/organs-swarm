@@ -19,13 +19,21 @@ import sys, time, json, subprocess, urllib.request, datetime, os
 secs = int(sys.argv[1]) if len(sys.argv) > 1 else 900
 label = sys.argv[2] if len(sys.argv) > 2 else "sit"
 outdir = os.path.join(HOME, "data", "skin")
+os.makedirs(outdir, exist_ok=True)  # F-15 cure (deleg_b499ec12): fresh-home first-write class
 out = os.path.join(outdir, f"sit-{label}.jsonl")
 
-KEYS = ("requests","duration_s","tok_s","decode_tok_s","gpu","temp","util",
-        "power","ram","memory","live","state","phase","prompt","generation",
-        "reused","draft","cache","park","restore","evict","total","tokens")
+# F-22 cure (deleg_b499ec12): KEYS was dead code (referenced only in the header prose, never in
+# logic) and documented retired 0.1.x /metrics keys -- removed; header carries the current grammar.
 
 def nvidia():
+    # F-22 cure (deleg_b499ec12): nvidia() was the ONLY unguarded call site in the rig -- an
+    # OSError/missing-binary killed the whole sampler mid-run. Fail named, row carries N/A.
+    try:
+        return _nvidia_raw()
+    except Exception as e:
+        return {"N/A": type(e).__name__}
+
+def _nvidia_raw():
     r = subprocess.run(["nvidia-smi","--query-gpu=timestamp,temperature.gpu,"
         "utilization.gpu,power.draw,clocks.sm","--format=csv,noheader,nounits"],
         capture_output=True, text=True).stdout.strip().split(",")

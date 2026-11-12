@@ -10,7 +10,8 @@ def _organs_home():
 HOME = _organs_home()
 
 # strata_forward_18080.py - shop-side TCP forwarder: WSL dream seat route (keeper order 2026-11-07)
-# Forwards 0.0.0.0:18080 -> 127.0.0.1:8080 (strata). Shop-owned, stdlib, threaded.
+# Forwards LISTEN -> TARGET (env-shim; 8080-era default retired with the 0.2.13 re-stamp -- the
+# TARGET value travels with the repo, per the F-18 audit nit: comments must not cite dead ports).
 import socket, threading, sys
 
 LOCAL = ("0.0.0.0", 18080)
@@ -47,7 +48,11 @@ def main():
     s.listen(64)
     print(f"forwarding {LOCAL} -> {TARGET}", flush=True)
     while True:
-        c, addr = s.accept()
+        try:  # F-10 cure (deleg_b499ec12): transient accept OSError must NOT kill the forwarder
+            c, addr = s.accept()
+        except OSError as _e:
+            print(f"ACCEPT-ERR: {type(_e).__name__}: {_e} -- continuing", flush=True)
+            continue
         threading.Thread(target=handle, args=(c,), daemon=True).start()
 
 if __name__ == "__main__":

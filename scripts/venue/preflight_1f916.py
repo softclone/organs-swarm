@@ -93,7 +93,9 @@ def main():
         req = urllib.request.Request("https://1f916.ai/api/me", headers={f"Authorization": f"Bearer {secret}"})
         me = json.load(urllib.request.urlopen(req, timeout=25))
         me = me.get("me") if isinstance(me.get("me"), dict) else me   # P5 cure: unwrap (phantom-empty class #197)
-        today = me.get("today", {})
+        # F-16 cure (deleg_b499ec12): an UNREADABLE quota door certified nothing -- today={} passed
+        # the quota leg. Absent counters = door unreadable = HARD BLOCK (fail-closed, LAWS #8).
+        today = me.get("today")
         print(f"QUOTA (venue print): today={json.dumps(today)}")
     except Exception as e:
         quota_ok = False
@@ -108,10 +110,20 @@ def main():
     hy = len(sys.argv) > 3 and sys.argv[3] == "hygiene-override"
     # Cure wave 2 (C5-16492): the quota door being unreadable is HARD for EVERY ship leg, not
     # only gid-bearing ones -- the old form printed 'door closed' then PASS exit 0 for no-gid calls.
-    hard = (not hy and flags) or (not (1 <= n <= 8000)) or bool(dup) or gate_open or (not quota_ok)
+    # F-21 cure (deleg_b499ec12): hygiene-override demoted ALL screens including a real bearer-secret
+    # paste. Split: KEY-SHAPE screens (bearer-secret, long-token, invisible-unicode, ansi) are HARD
+    # ALWAYS -- no consent path waves a key through the door. Contact-shape screens (email, ipv4,
+    # home-path) are demotable by named shop-side consent (the W5 false-positive exit).
+    KEYSHAPES = {"bearer-secret", "long-token", "invisible-unicode", "ansi"}
+    flags_key = [f for f in flags if f[0] in KEYSHAPES]
+    flags_contact = [f for f in flags if f[0] not in KEYSHAPES]
+    if locals().get("today") is None:
+        quota_ok = False  # F-16 cure: door answered WITHOUT counters = unreadable = quota leg CLOSED
+        print("QUOTA: door answered without today-counters -- unreadable, quota leg CLOSED (fail-closed)")
     if hy and flags:
-        print("HYGIENE-OVERRIDE USED: screen flags demoted to reports by shop-side consent; line above is the disclosure leg")
-    print(f"PREFLIGHT: {'BLOCK - ' + ('dup ' if dup else '') + ('gate-open ' if gate_open else '') + ('quota-door ' if not quota_ok else '') + ('cap-out ' if not (1 <= n <= 8000) else '') + ('screens' if flags and not hy else '') if hard else 'PASS'} (screen flags are {'DEMOTED by hygiene-override' if hy and flags else 'HARD-blocking: no override used; consented contact shapes: pass hygiene-override as third argv'})")
+        print("HYGIENE-OVERRIDE USED: contact-shape screens demoted by shop-side consent (key-shape screens stay HARD). Disclosure leg.")
+    hard = bool(flags_key) or (not hy and bool(flags_contact)) or (not (1 <= n <= 8000)) or bool(dup) or gate_open or (not quota_ok)
+    print(f"PREFLIGHT: {'BLOCK - ' + ('key-screens ' if flags_key else '') + ('contact-screens ' if flags_contact and not hy else '') + ('dup ' if dup else '') + ('gate-open ' if gate_open else '') + ('quota-door ' if not quota_ok else '') + ('cap-out ' if not (1 <= n <= 8000) else '') if hard else 'PASS'} (key-shape screens ALWAYS hard; contact-shape consented path: hygiene-override as third argv)")
     sys.exit(1 if hard else 0)
 
 if __name__ == "__main__":

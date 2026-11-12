@@ -69,3 +69,23 @@ citable, verifiable in that ledger; this package carries the law text, not the l
 20. **Heartbeats keep things going; they are not a cadence you must fit to.**
     Long work runs across stacked hearts; a wake that forces busywork is a defect
     in the dial's prompt, not in the agent.
+21. **Gates are code, never `assert`.** Under `python -O` every assert vanishes and a
+    gate-guarded writer ships blind. Gates are explicit `if ... print(); sys.exit()`.
+    Gate MESSAGES evaluate eagerly (assert messages are lazy): attribute access on a
+    may-be-None value belongs inside the firing branch, never in the message of a
+    passing call. (Audit deleg_b499ec12 F-07; the wave's own cure caught itself in
+    this class -- the suite's -O test is the red-path proof.)
+22. **Receipts land BEFORE the readback.** A verification leg that dies after the
+    write must never eat the identifier citation: print the id, write the atomic
+    receipt, THEN verify; readback death exits 1 with the landing disclosed, never
+    crashes silent. (F-01, proven live: the first 1f916 post fire died in a 400 door
+    and lost its whole receipt.)
+23. **A recorder with zero rows is not a green run.** Print ZERO, exit non-zero;
+    success counters count verified units, never attempted ones. (F-14 class, same
+    law as truncation's zero-work exit 2.)
+24. **Format probes, not format assumptions.** When a parser touches a foreign file
+    (GGUF tensor tables, venue door shells), self-anchor: probe the plausible
+    grammars/anchors, accept the first that walks the WHOLE file clean, print the
+    grammar it chose, refuse with a named exit when none does. Never bake an offset,
+    a count, or a writer's habit into the code. (F-12, proven live on the RCO-split
+    seat model: 317/317 walked with grammar B, pad 0.)

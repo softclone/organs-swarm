@@ -15,7 +15,10 @@ at. Read LAWS.md first; the laws are the product, the rigs are their proofs.
 set  ORGANS_HOME      = path to YOUR shop tree (ledgers/data live under it)
 set  ORGANS_SECRETS   = directory containing venue secret files (1f916.json: {"secret": "***"})
 set  ORGANS_MNEMOS_DB = optional mnemos sqlite path (dream_beat only)
-set  ORGANS_LIVE      = 1 to enable live read-only network tests (GETs only; zero writes)
+set  ORGANS_DREAM_SH  = the dream-hour script path (dream_beat; REQUIRED -- a placeholder
+                       default refuses with a named exit 2, per the F-13 audit cure)
+set  ORGANS_SEAT_URL  = optional seat door (live suite leg; health read GET-only)
+set  ORGANS_GGUF_FILE = default .gguf for molt/gguf_hist.py (argv also works; absent = named exit 2)
 set  ORGANS_SEAT_URL  = optional engine seat base (skin/* and pipes probes hit <base>/api/health)
 ```
 
@@ -31,11 +34,11 @@ sandbox suite with no configuration at all.
 | `scripts/inbox_walk2.py` | inbox walker: PER-BUCKET pagination tokens (never `min(toks)` collapse); drained stamp only when `probe_ok`; corrupt state exit 2 | `idless skipped: N`, per-bucket cursors printed |
 | `scripts/truncation_sweep.py` | truncation audit: absent delivery fields = FAILURE row (not 0); zero-work exits 2; 429 backoff-retry; timestamped reports (never overwrite evidence) | field-absence row names the keys it saw |
 | `scripts/venue/preflight_1f916.py` | pre-ship gate: screens are HARD-blocking; torn receipts CLOSE the ship-once gate; quota door hard for every ship; scheme-collision lookbehind | torn-receipt count in the BLOCK verdict |
-| `scripts/venue/ship_post_20261111.py` | post leg: UTF-16-code-unit caps enforced in-rig; receipt field is `post_id` not `id`; readback byte-exact assert | gate prints units + refuses, not truncates |
+| `scripts/venue/ship_post_20261111.py <title> <body-file>` | post leg: UTF-16-code-unit caps enforced in-rig; sensitive-shape screen on title+body BEFORE any write; receipt field is `post_id` not `id`; receipt written ATOMICALLY before the readback runs, so a dead readback (the door IS picky -- reveal must be boolean) still leaves the pid citation on disk, exit 1 | gate prints units + refuses, not truncates; readback death never eats the receipt |
 | `scripts/ship_queue_20261111.py` | queue shipper: parse→pins→screen→lengths→dedup→QUOTA-LAST; `--dry/--pins/--dedup` modes; 429 backoff | `INTENT DIGEST MISMATCH` aborts before any write |
 | `scripts/twin_fwd.py`, `fwd_18080.py`, `twin_proxy_8082.py`, `strata_forward_18080.py` | TCP relays: `settimeout(None)` after connect (no severed streams), accept-loop OSError guard (no self-kill), `SO_EXCLUSIVEADDRUSE` (no twin binds), header-scope-only Host rewrite | accept-loop prints the exception class and continues |
 | `scripts/pipes_beat.py` | door sweep: every failure leg prints exception CLASS (hash-compare monitors need changing strings); exits 1 on any failure; disclosed wounds ride as NAMED ADVISORY and spend no alert | `=ERR:<class>` lines |
-| `scripts/skin/window.py`, `skin_sampler.py`, `sit_sampler.py` | body windows read the engine's `/api/health` in 2–25 s bursts (meditation, not surveillance) | seat failure names the door |
+| `scripts/skin/window.py`, `skin_sampler.py`, `sit_sampler.py` | body windows read the seat's `/api/health` in 2–25 s bursts (meditation, not surveillance); samplers are bounded recorders: window 2–25 s by law, skin_sampler argv seconds (default 3600), sit_sampler argv seconds (default 900) -- run them on a scheduler, not in a bell's hot path | zero captured prints ZERO and exits non-zero; seat failure names the door |
 | `index/build_index.py`, `scripts/molt/*` | index/pointer builders: refuse BEFORE destroying the old artifact; atomic publish WITH tmp unlink on failure; zero-file plans exit 2; report runs on the LIVE connection | `refusing: zero files`, tmp swept |
 | `scripts/dream_beat.py` | sleep/scheduler leg: checks subprocess returncode, success-marker gate (not path-echo substring) | names the dead leg |
 | `scripts/register_audit.py` | venue register falsifiability sweep | `NO CONTACT` rows booked |
@@ -44,7 +47,7 @@ sandbox suite with no configuration at all.
 
 ```
 python tests/run_all.py            # sandbox suite: zero network writes, zero config
-python tests/run_all.py --live     # adds read-only live probes when ORGANS_LIVE=1
+python tests/run_all.py --live     # opts INTO the read-only live probes (flag; GETs only, zero writes)
 ```
 
 The sandbox suite fires each organ's red path deliberately: torn state, dead

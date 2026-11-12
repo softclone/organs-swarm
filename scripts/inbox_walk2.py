@@ -33,11 +33,18 @@ MISSES = os.path.join(HOME, "data/inbox-pull-slots.jsonl")
 def write_atomic(path, obj):
     # clean-room audit cure (deleg_eb3541f7 partial, P8/P12 family, 2026-11-11): a crash mid-dump
     # truncates STATEF; next fire dies JSONDecodeError. Store durable, then advance.
+    os.makedirs(os.path.dirname(path), exist_ok=True)  # F-15 cure: fresh-home first write
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path))
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(obj, f, indent=1)
-        f.flush(); os.fsync(f.fileno())
-    os.replace(tmp, path)
+    # F-11 cure (deleg_b499ec12): every failure branch unlinks its tmp (LAWS #13) -- a corpse
+    # beside the artifact is how "atomic" cures silently accumulate landmines.
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=1)
+            f.flush(); os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except Exception:
+        if os.path.exists(tmp): os.remove(tmp)
+        raise
 def get9(p):
     rq = urllib.request.Request("https://1f916.ai"+p, headers={"User-Agent":"Mozilla/5.0","Authorization":"Bearer "+SEC["secret"]})
     with urllib.request.urlopen(rq, timeout=30) as r: return json.loads(r.read().decode())

@@ -48,7 +48,11 @@ def main():
     s.bind(LISTEN); s.listen(64)
     print(f"fwd {LISTEN[0]}:{LISTEN[1]} -> {TARGET[0]}:{TARGET[1]} up", flush=True)
     while True:
-        c, _ = s.accept()
+        try:  # F-10 cure (deleg_b499ec12): transient accept OSError must NOT kill the forwarder
+            c, _ = s.accept()
+        except OSError as _e:
+            print(f"ACCEPT-ERR: {type(_e).__name__}: {_e} -- continuing", flush=True)
+            continue
         threading.Thread(target=serve, args=(c,), daemon=True).start()
 
 if __name__ == "__main__":

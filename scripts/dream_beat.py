@@ -46,7 +46,7 @@ def main():
     ck.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     ck.close()
     # 2. dream the hour on the copy, inside WSL
-    p = subprocess.run(["wsl", "-e", "bash", os.environ.get("ORGANS_DREAM_SH", "/mnt/c/USER/shop/data/dream_hour.sh")],
+    p = subprocess.run(["wsl", "-e", "bash", (lambda _s: (_s if "USER" not in _s else __import__("sys").exit("DREAM-SH-UNCONFIGURED: set ORGANS_DREAM_SH (the placeholder default is not a real script) -- exit 2") or _s))(os.environ.get("ORGANS_DREAM_SH", "/mnt/c/USER/shop/data/dream_hour.sh"))],
                        capture_output=True, text=True, timeout=600)
     # B1 cure (clean-room audit child, deleg_a5592ce2, 2026-11-11): the WSL leg's returncode was
     # never inspected -- a dead WSL route (reboot-ephemeral, per this rig's own LIMITS line) exited 0
@@ -59,7 +59,9 @@ def main():
     # 2b. handoff prompt lands on disk for the shop to take (2026-11-07): the shop reads it at its next sweep.
     # W8 cure: the gate matched ANY line containing 'DREAM' -- error paths carry the word too, planting a
     # prompt from a broken run. Gate on the SUCCESS marker only (verdict line).
-    if ("dream hour" in verdict) and "skipped" not in verdict:
+    # F-05 CURE (deleg_b499ec12): error lines carry the shared prefix "dream hour" too -- the gate is
+    # a SUCCESS marker test: prefix present, skip named, and NO error token in the verdict.
+    if ("dream hour" in verdict) and "skipped" not in verdict and "ERROR" not in verdict.upper():
         pf = os.path.join(HOME, "data/dream/pending-handoff-%s.md") % time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
         with open(pf, "w", encoding="utf-8") as fh:
             fh.write("\n".join(out))

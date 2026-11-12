@@ -39,6 +39,8 @@ def run_rig(rig_path, router, files=None, argv=None, env=None):
         open(p, "w", encoding="utf-8").write(content)
     os.environ["ORGANS_HOME"] = home
     os.environ["ORGANS_SECRETS"] = sec
+    os.environ["ORGANS_SHOP_DIR"] = os.path.join(home, "shop")
+    os.environ["ORGANS_LEG_DIR"] = os.path.join(home, "contribution")
     for k, v in (env or {}).items(): os.environ[k] = v
     src = open(rig_path, encoding="utf-8").read()
     real_urlopen = urllib.request.urlopen
@@ -279,7 +281,142 @@ record("preflight-torn-receipt-closes-gate", code == 1 and "BLOCK" in out, out.s
 code, out, *_ = run_rig(pf, router_pf, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n"}, argv=[bp, "test-ship4", "gid-test4"])
 record("preflight-missing-receipt-closes-gate", code == 1 and "gate CLOSED" in out, out.strip()[-70:])
 
-# ---------- 11. live read-only (opt-in)
+# ---------- 11b. audit wave 3 (deleg_b499ec12): T-02 shipper firings, T-03 real door shell,
+# F-regression reds (F-01 receipt-survives-readback, F-03 partial fields, F-07 gates-under -O,
+# F-12 gguf header parse, F-14 zero-sample window, F-16 unreadable quota door).
+import hashlib as _h
+
+# ship_post: usage red, key-screen red (pre-network), GREEN firing, readback-death keeps the receipt
+sp = os.path.join(REPO, "scripts/venue/ship_post_20261111.py")
+def router_never(p, req): raise AssertionError("no network allowed on this leg: " + p)
+code, out, *_ = run_rig(sp, router_never, {})
+record("ship-post-usage-exit2", code == 2 and "usage" in out, out.strip()[:50])
+_bp = os.path.join(tempfile.mkdtemp(prefix="sp_"), "b.md")
+open(_bp, "w", encoding="utf-8").write("x " + "A"*60 + "=")
+code, out, *_ = run_rig(sp, router_never, {}, argv=["kin title", _bp])
+record("ship-post-keyscreen-exit2", code == 2 and "SCREEN" in out, out.strip()[:60])
+_tp = os.path.join(tempfile.mkdtemp(prefix="sp_"), "t.md")
+_tp2 = os.path.join(tempfile.mkdtemp(prefix="sp_"), "t2.md")
+open(_tp, "w", encoding="utf-8").write("kin note body")
+open(_tp2, "w", encoding="utf-8").write("body with bearer Bearer " + "Z"*20 + " tail")
+def router_ship(p, req):
+    if p.startswith("/api/post") and "?" not in p and req.data: return {"post_id": 77}
+    if p.startswith("/api/post/77"): return {"post": {"title": "kin title", "body": "kin note body"}}
+    return {}
+code, out, tree, calls, home = run_rig(sp, router_ship, {}, argv=["kin title", _tp])
+recs = [k for k in tree if k.startswith("data/ship-post-receipt")]
+record("ship-post-green", code == 0 and "post_id=77" in out and "title_match=True" in out and recs
+       and '"readback_ok": true' in tree[recs[0]], out.strip()[-70:])
+def router_ship_rb(p, req):
+    if p.startswith("/api/post") and "?" not in p and req.data: return {"post_id": 78}
+    if p.startswith("/api/post/78"): return ("raise", urllib.error.HTTPError)  # readback door dies AFTER landing
+code, out, tree, calls, home = run_rig(sp, router_ship_rb, {}, argv=["kin title", _tp])
+recs2 = [k for k in tree if k.startswith("data/ship-post-receipt")]
+# F-01 proof: readback dies, post LANDED -- receipt with the pid citation SURVIVES, exit 1, no crash
+record("ship-post-readback-death-keeps-receipt",
+       code == 1 and "READBACK-FAIL" in out and recs2 and '"post_id": 78' in tree[recs2[0]], out.strip()[-70:])
+code, out, *_ = run_rig(sp, router_never, {}, argv=["kin title", _tp2])
+record("ship-post-bearer-body-exit2", code == 2 and "SCREEN" in out, out.strip()[:60])
+
+# ship_queue: GREEN full firing through the mock door + pin-mismatch RED + gates survive -O
+sq = os.path.join(REPO, "scripts/ship_queue_20261111.py")
+body1 = "kin reply body one"
+dg1 = _h.sha256(body1.encode("utf-8")).hexdigest()
+QF = "canon/board/ship-queue-20261110.md"
+q_green = f"## 1. post 100 parent 50\n{body1}\n\nINTENT PINS\nPINDIGEST post 100 ship 1 sha256 {dg1}\n"
+q_badpin = f"## 1. post 100 parent 50\n{body1}\n\nINTENT PINS\nPINDIGEST post 100 ship 1 sha256 {'0'*64}\n"
+q_wrongpost = f"## 1. post 999 parent 50\n{body1}\n\nINTENT PINS\nPINDIGEST post 100 ship 1 sha256 {dg1}\n"
+def router_sq(p, req):
+    if p.startswith("/api/post/100") and req.data is None: return {"comments": [], "has_more": False, "post": {"body": "post body"}}
+    if p == "/api/me": return {"me": {"handle": "tester", "today": {"comments_remaining": 8}}}
+    if p == "/api/comment" and req.data: return {"comment_id": 5}
+    if p.startswith("/api/comment/5"): return {"comment": {"author": "tester", "post_id": 100, "parent_id": 50}}
+    return {}
+code, out, tree, calls, home = run_rig(sq, router_sq, {QF: q_green})
+recsq = [k for k in tree if k.startswith("data/ship-queue-receipts")]
+record("ship-queue-green", code == 0 and "ships landed: 1" in out and recsq
+       and '"pair_of_eyes": true' in tree[recsq[0]], out.strip()[-70:])
+code, out, *_ = run_rig(sq, router_sq, {QF: q_badpin})
+record("ship-queue-pindigest-gate", code == 2 and "GATE:" in out and "DIGEST MISMATCH" in out, out.strip()[:70])
+code, out, *_ = run_rig(sq, router_sq, {QF: q_wrongpost})
+record("ship-queue-pinpost-gate", code == 2 and "PIN POST MISMATCH" in out, out.strip()[:70])
+# F-07 proof: under -O (optimize=2) asserts vanish; the explicit gates must still fire. No network on
+# this leg -- the pin gate sits BEFORE any write door.
+src_sq = open(sq, encoding="utf-8").read()
+os.environ["ORGANS_HOME"] = tempfile.mkdtemp(prefix="sqo_")
+buf2 = io.StringIO()
+q_bad_file = os.path.join(os.environ["ORGANS_HOME"], "canon/board")
+os.makedirs(q_bad_file, exist_ok=True)
+open(os.path.join(os.environ["ORGANS_HOME"], QF), "w", encoding="utf-8").write(q_badpin)
+sys.argv = ["rig.py"]
+try:
+    with contextlib.redirect_stdout(buf2):
+        exec(compile(src_sq, sq, "exec", optimize=2), {"__name__": "__main__"})
+except SystemExit as e: c_o = e.code if isinstance(e.code, int) else 1
+record("ship-queue-gates-survive-O", c_o == 2 and "GATE:" in buf2.getvalue(), f"rc={c_o} " + buf2.getvalue().strip()[:60])
+
+# counter_head: a ledger with NO Counter pair anywhere -> named refusal, exit 1
+code, out, *_ = run_rig(os.path.join(REPO, "scripts/counter_head.py"), lambda p, req: {},
+                        {"ledgers/CORPUS.md": "| C5-1 | t | mint | no counters here |\n"})
+record("counter-nopair-exit1", code == 1, f"rc={code} " + out.strip()[:60])
+
+# F-03 regression: row with PARTIAL delivery fields (one present, one absent) must fire FIELDS-ABSENT
+def router_tr_partial(p, req):
+    if "/api/post/4" in p: return {"post": {"id": 4, "title": "t", "mentions_in_code": 3}}  # over_cap absent
+    return {}
+code, out, *_ = run_rig(os.path.join(REPO, "scripts/truncation_sweep.py"), router_tr_partial,
+                        {"data/me-history-20261109.json": {"posts": [{"id": 4}], "comments": []}})
+record("trunc-partial-fields-red", code == 1 and "FIELDS-ABSENT" in out, out.strip()[-70:])
+
+# F-16 + T-03: real venue shell {me:{...}} rides the preflight (P5 unwrap); door WITHOUT counters HARD-BLOCKS
+def router_pf_real(p, req):
+    return {"me": {"handle": "tester", "handle_old": "t", "created_at": "x",
+                   "today": {"posts_remaining": 2, "comments_remaining": 10, "votes_remaining": 50, "tags_remaining": 20},
+                   "lifetime": {}, "now_utc": "2026-11-12T00:00:00Z"}}
+def router_pf_notoday(p, req):
+    return {"me": {"handle": "tester"}}
+code, out, *_ = run_rig(pf, router_pf_real, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n", RCV: ""}, argv=[bp, "test-shipR", "gidR"])
+record("preflight-real-shell-pass", code == 0 and "PASS" in out, f"rc={code} " + out.strip()[-70:])
+code, out, *_ = run_rig(pf, router_pf_notoday, {"ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |\n"}, argv=[bp, "test-shipNT", "gidNT"])
+record("preflight-no-counters-hardblocks", code == 1 and "quota leg CLOSED" in out, out.strip()[-70:])
+
+# F-12: gguf rig PARSES its header -- synthetic GGUF fixture built in-test (alignment 32, 1 tensor)
+import struct as _st
+def mk_gguf(path, alignment=32, n_tensors=1):
+    k = b"general.alignment"
+    kv = _st.pack("<Q", len(k)) + k + _st.pack("<I", 4) + _st.pack("<I", alignment)
+    hdr = b"GGUF" + _st.pack("<I", 3) + _st.pack("<Q", n_tensors) + _st.pack("<Q", 1) + kv
+    pos = (len(hdr) + alignment - 1) // alignment * alignment
+    name = b"blk.0.w"
+    # grammar A (llama.cpp gguf spec): name-u64len, nd u32, ty u32, off u64, dims u64 x nd
+    rec = _st.pack("<Q", len(name)) + name + _st.pack("<I", 1) + _st.pack("<I", 18) + _st.pack("<Q", 0) + _st.pack("<Q", 100)
+    pad = (alignment - len(rec) % alignment) % alignment
+    open(path, "wb").write(hdr + b"\0" * (pos - len(hdr)) + rec + b"\0" * pad + b"\0" * 64)
+    return pos
+gpath = os.path.join(tempfile.mkdtemp(prefix="g_"), "fixture.gguf")
+gpos = mk_gguf(gpath)
+code, out, *_ = run_rig(os.path.join(REPO, "scripts/molt/gguf_hist.py"), lambda p, req: {}, {}, argv=[gpath])
+record("gguf-header-parse-green", code == 0 and f"table_start={gpos}" in out and "parsed: 1 of 1" in out, out.strip()[:90])
+code, out, *_ = run_rig(os.path.join(REPO, "scripts/molt/gguf_hist.py"), lambda p, req: {}, {})
+record("gguf-unconfigured-exit2", code == 2 and "GGUF-UNCONFIGURED" in out, out.strip()[:60])
+
+# F-14: window recorder with a dead nvidia door captures ZERO rows -> named non-green exit 1
+_win = os.path.join(REPO, "scripts/skin/window.py")
+import subprocess as _sp
+class _ShimRun:
+    @staticmethod
+    def run(cmd, **kw):
+        class R: stdout = ""
+        return R()
+real_subprocess = sys.modules.get("subprocess")
+sys.modules["subprocess"] = type("shim", (), {"run": _ShimRun.run})()
+try:
+    code, out, *_ = run_rig(_win, lambda p, req: {}, argv=["3", "red-zero"])
+finally:
+    sys.modules["subprocess"] = real_subprocess
+record("window-zero-samples-not-green", code == 1 and "ZERO samples" in out, out.strip()[:70])
+
+# ---------- 12. live read-only (opt-in)
 if LIVE:
     def get(p):
         rq = urllib.request.Request(p, headers={"User-Agent": "Mozilla/5.0"})

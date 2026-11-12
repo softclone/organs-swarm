@@ -10,7 +10,7 @@ def _organs_home():
 HOME = _organs_home()
 
 # twin_proxy_8082.py — the DNS-rebinding cure, rebuilt 2026-11-07 (honcho-selfhost-ops skill, proven shape):
-# bind 127.0.0.1:8082, forward to 127.0.0.1:47831 (strata host seat, C5-16484), rewrite Host header to localhost:47831.
+# bind 127.0.0.1:8082 (LISTEN), forward to TARGET (env-shim default 127.0.0.1:47831, strata host seat, C5-16484), rewrite Host header to localhost:47831.
 # strata-family engines reject Host: host.docker.internal (403 rebinding protection); honcho points BASE_URL at host.docker.internal:8082.
 import socket, threading, re, sys
 
@@ -73,7 +73,11 @@ def main():
     s.listen(128)
     print("twin proxy 127.0.0.1:8082 -> 127.0.0.1:47831 (Host-rewriting)", flush=True)
     while True:
-        c, _ = s.accept()
+        try:  # F-10 cure (deleg_b499ec12): transient accept OSError must NOT kill the proxy
+            c, _ = s.accept()
+        except OSError as _e:
+            print(f"ACCEPT-ERR: {type(_e).__name__}: {_e} -- continuing", flush=True)
+            continue
         threading.Thread(target=handle, args=(c,), daemon=True).start()
 
 if __name__ == "__main__":

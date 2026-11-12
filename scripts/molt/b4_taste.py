@@ -15,7 +15,16 @@ HOME = _organs_home()
 # Protocol: map before move; git mv; ref-scan (the PATCH is a follow-up leg, per F11 cure); ledger row; verify off-rig.
 import os, re, subprocess, json, sqlite3, datetime, sys
 
-SHOP = os.environ.get("ORGANS_SHOP_DIR", os.path.join(HOME, "shop"))
+def _cfgkey(k):
+    import json as _j
+    for _p in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"),
+               os.path.expanduser("~/organs.json")):
+        try:
+            v = _j.load(open(_p, encoding="utf-8")).get(k)
+            if v: return v
+        except Exception: pass
+    return None
+SHOP = os.environ.get("ORGANS_SHOP_DIR") or _cfgkey("shop_dir") or os.path.join(HOME, "shop")
 SRC_DIR = os.path.join(SHOP, "eros")
 DST_DIR = os.path.join(SHOP, "canon", "taste")
 LEDGER = os.path.join(SHOP, "MOLT3-LEDGER.md")

@@ -32,7 +32,16 @@ def get9_r(p):
         try:
             return get9(p)
         except urllib.error.HTTPError as e:
+            # F-04 CURE (deleg_b499ec12): the comment promised envelope discrimination, the code
+            # retried EVERY 429. Real split: quota-wall 429 (JSON body naming remaining/reset) is a
+            # stop-until-reset wall -- re-raise, do not burn the retry; edge rate-limits back off.
             if e.code == 429 and attempt == 0:
+                try:
+                    _b = e.read().decode(errors="replace")
+                except Exception:
+                    _b = ""
+                if "remaining" in _b or "reset" in _b:
+                    raise
                 time.sleep(60)
                 continue
             raise
@@ -53,7 +62,9 @@ for kind, key, path in (("post","posts","/api/post/{id}"), ("comment","comments"
                 time.sleep(2.0)
                 continue
             # Cure wave 2 (C5-16492): delivery fields ABSENT is a FAILURE (field drift), not a silent 0/0
-            if "mentions_in_code" not in r0 and "mentions_over_cap" not in r0:
+            # F-03 CURE (deleg_b499ec12): AND-guard let rows missing ONE field sail through as 0 --
+            # per-field absence is the failure (LAWS #9), name the keys seen.
+            if "mentions_in_code" not in r0 or "mentions_over_cap" not in r0:
                 rows.append({"kind": kind, "id": pid, "error": "delivery-fields-absent"})
                 print(f"FIELDS-ABSENT {kind} {pid}: keys={sorted(r0.keys())[:8]}")
                 time.sleep(2.0)
@@ -79,10 +90,15 @@ if tot_over or fails:
     print(f"in_code total: {tot_in} | over_cap total: {tot_over} | failures: {fails}")
 import tempfile, os
 rep = os.path.join(HOME, f"data/truncation-sweep-{time.strftime('%Y%m%d-%H%M%S')}.json")  # cure: timestamped -- same-day re-runs never overwrite RED evidence
+os.makedirs(os.path.join(HOME, "data"), exist_ok=True)  # F-15 cure: fresh home
 fd, tmp = tempfile.mkstemp(dir=os.path.join(HOME, "data"))
-with os.fdopen(fd, "w", encoding="utf-8") as fh:
-    json.dump(rows, fh, indent=1); fh.flush(); os.fsync(fh.fileno())
-os.replace(tmp, rep)
+try:  # F-11 cure: unlink tmp on any failure (LAWS #13)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(rows, fh, indent=1); fh.flush(); os.fsync(fh.fileno())
+    os.replace(tmp, rep)
+except Exception:
+    if os.path.exists(tmp): os.remove(tmp)
+    raise
 if tot_over or fails:
     print("report saved", rep)
     raise SystemExit(1)

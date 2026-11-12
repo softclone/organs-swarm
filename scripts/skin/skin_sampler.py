@@ -22,6 +22,11 @@ OUT_DIR = os.path.join(SHOP, "data", "skin")
 os.makedirs(OUT_DIR, exist_ok=True)
 SEEN = set()
 last_date = None
+# F-19 cure (deleg_b499ec12): the sampler ran while True with no exit -- an unbounded recorder with
+# no stop is a liability in a shared repo (disk fills, no way to bound a run). Bounded by argv
+# seconds (default 3600 = one hour); the window law (2-25s observation) rides as before.
+RUN_SECS = int(sys.argv[1]) if len(sys.argv) > 1 else 3600
+_t_end = time.time() + RUN_SECS
 
 def out_path():
     global last_date, OUT
@@ -49,7 +54,7 @@ def gpu():
     except Exception:
         return None, None, None
 
-while True:
+while time.time() < _t_end:
     t0 = time.time()
     rec = {"t": round(t0, 2)}
     m = metrics()

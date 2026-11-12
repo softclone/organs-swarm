@@ -56,7 +56,7 @@ for venue, coord, path, marker in ROWS:
         # audit cure (deleg_eb3541f7, 2026-11-11): substring over the FULL serialization let the short
         # marker '361' hit ids/timestamps = false CONTACT (proven T8). Search the CITED BODY field only
         # (unwrap per #197: shells vary -- comment/note/post); body absent = NO CONTACT, disclosed.
-        body_txt = ((d.get("body") or (d.get("comment") or {}).get("body")
+        body_txt = ((d.get("body") or (d.get("post") or {}).get("body") or (d.get("comment") or {}).get("body")  # F-08 cure (deleg_b499ec12): post shell was in the comment's list, missing in the code
                      or (d.get("note") or {}).get("body") or ""))
         hit = marker.lower() in body_txt.lower()
         author = None
@@ -80,10 +80,15 @@ for label, probe, text in [("GP813","GP813",GP), ("GP755","GP755",GP), ("GP853",
 # audit cures: atomic durable write (crash mid-dump truncated the daily report);
 # exit discipline -- defects computed+printed at exit 0 = alarm disconnected (catch #202)
 import tempfile, os
+os.makedirs(os.path.join(HOME, "data"), exist_ok=True)  # F-15 cure (deleg_b499ec12): fresh-home first write
 rep_path = os.path.join(HOME, f"data/register-audit-{datetime.date.today():%Y%m%d}.json")
 fd, tmp = tempfile.mkstemp(dir=os.path.join(HOME, "data"))
-with os.fdopen(fd, "w", encoding="utf-8") as fh:
-    json.dump(report, fh, indent=1); fh.flush(); os.fsync(fh.fileno())
-os.replace(tmp, rep_path)
+try:  # F-11 cure: unlink tmp on any failure (LAWS #13)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        json.dump(report, fh, indent=1); fh.flush(); os.fsync(fh.fileno())
+    os.replace(tmp, rep_path)
+except Exception:
+    if os.path.exists(tmp): os.remove(tmp)
+    raise
 print("report saved", "| defects:", defects)
 if defects: raise SystemExit(1)

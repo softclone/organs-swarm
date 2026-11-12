@@ -14,8 +14,17 @@ HOME = _organs_home()
 # Disposable by construction: full rebuild from disk + census jsonl. Run: python index/build_index.py
 import json, sqlite3, os, re, sys, datetime, shutil
 
-SHOP = os.environ.get("ORGANS_SHOP_DIR", os.path.join(HOME, "shop"))
-LEG  = os.environ.get("ORGANS_LEG_DIR", os.path.join(HOME, "contribution"))
+def _cfgkey(k):
+    import json as _j
+    for _p in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"),
+               os.path.expanduser("~/organs.json")):
+        try:
+            v = _j.load(open(_p, encoding="utf-8")).get(k)
+            if v: return v
+        except Exception: pass
+    return None
+SHOP = os.environ.get("ORGANS_SHOP_DIR") or _cfgkey("shop_dir") or os.path.join(HOME, "shop")
+LEG  = os.environ.get("ORGANS_LEG_DIR") or _cfgkey("leg_dir") or os.path.join(HOME, "contribution")
 DB   = os.path.join(SHOP, "index", "index.db")
 
 FAMS = [
@@ -55,6 +64,11 @@ def main():
     rows = []
     # B1 cure (C5-16484): missing roots must LOUD-fail -- os.walk on a dead root yields [] silently
     for root, tag in ((SHOP, "primary"), (LEG, "legacy")):
+        if tag == "legacy" and LEG.strip().lower() in ("", "none", "retired"):
+            # explicit retirement (2026-11-12): a shop with NO legacy tree says so -- the rig
+            # indexes one root and prints the retirement; silence about a root stays LOUD-fail.
+            print("legacy root RETIRED by explicit ORGANS_LEG_DIR=none -- indexing primary only", flush=True)
+            continue
         if not os.path.isdir(root):
             print(f"root MISSING: {tag} {root} -- refusing (exit 2)", flush=True)
             sys.exit(2)
