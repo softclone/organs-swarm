@@ -122,7 +122,7 @@ for n, pid, par, body in ships:
     moved = bool(par) and str(got_par) != str(par)
     recs.append({"ship": n, "post":pid, "parent_requested":par, "parent_attached":got_par,
                  "parent_MOVED":moved, "comment_id":cid, "pair_of_eyes":bool(ok),
-                 "dedup": d.get("deduplicated"), "ts":datetime.datetime.utcnow().isoformat()+"Z"})
+                 "dedup": d.get("deduplicated"), "ts":datetime.datetime.now(datetime.timezone.utc).isoformat()})
     if moved: print("MOVED: ship", cid, "requested parent", par, "attached", got_par)
     time.sleep(170)
 # F-11 cure: atomic receipt (plain write = crash mid-dump truncates the receipt chain -- and the
