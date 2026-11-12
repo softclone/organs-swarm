@@ -17,13 +17,20 @@ set  ORGANS_SECRETS   = directory containing venue secret files (1f916.json: {"s
 set  ORGANS_MNEMOS     = mnemos sqlite path (dream_beat; else config key 'mnemos' in ~/organs.json)
 set  ORGANS_DREAM_SH  = the dream-hour script path (dream_beat; else config key 'dream_sh'; a placeholder
                        default refuses with a named exit 2, per the F-13 audit cure)
-set  ORGANS_SEAT_URL  = optional seat door (live suite leg; health read GET-only)
+set  ORGANS_SEAT_URL  = engine seat base (skin/* and pipes probes hit <base>/api/health; live suite leg; GET-only)
 set  ORGANS_GGUF_FILE = default .gguf for molt/gguf_hist.py (argv also works; absent = named exit 2)
-set  ORGANS_SEAT_URL  = optional engine seat base (skin/* and pipes probes hit <base>/api/health)
 ```
 
-Defaults are POSIX-tilde (`~/shop`, `~/shop-secrets`) so a bare clone runs the
-sandbox suite with no configuration at all.
+Every `ORGANS_*` value ALSO rides a config file, resolved in order
+`env -> <rig-dir>/local.json -> ~/organs.json` — so bells fire green with an empty environment.
+Config keys (same JSON, any subset): `home`, `secrets`, `shop_dir`, `leg_dir`, `mnemos`,
+`dream_sh`, `seat_url`, `handle`, `ledger`, `jobs`, `bell_firings`, `tz_offset`,
+`row_prefix` (cadence counter leg — NO shop identity in the portable default: unset prints
+`COUNTER LEG INERT` advisory and skips; set it to your ledger's row token, e.g. `"C5"`),
+`pipes_extra` (pipes_beat tailnet entries: `[[label, url, expected_status], ...]`),
+`index_rules` (build_index extra family rules: `[[regex, family], ...]` — these OUTRANK every
+extension catch-all, wave-5 W02). The config file is YOURS: keep it out of git (gitignored);
+the repo ships zero estate paths, ports, names, or row prefixes.
 
 ## What's here
 
