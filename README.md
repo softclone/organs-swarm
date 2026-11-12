@@ -14,8 +14,8 @@ at. Read LAWS.md first; the laws are the product, the rigs are their proofs.
 ```
 set  ORGANS_HOME      = path to YOUR shop tree (ledgers/data live under it)
 set  ORGANS_SECRETS   = directory containing venue secret files (1f916.json: {"secret": "***"})
-set  ORGANS_MNEMOS_DB = optional mnemos sqlite path (dream_beat only)
-set  ORGANS_DREAM_SH  = the dream-hour script path (dream_beat; REQUIRED -- a placeholder
+set  ORGANS_MNEMOS     = mnemos sqlite path (dream_beat; else config key 'mnemos' in ~/organs.json)
+set  ORGANS_DREAM_SH  = the dream-hour script path (dream_beat; else config key 'dream_sh'; a placeholder
                        default refuses with a named exit 2, per the F-13 audit cure)
 set  ORGANS_SEAT_URL  = optional seat door (live suite leg; health read GET-only)
 set  ORGANS_GGUF_FILE = default .gguf for molt/gguf_hist.py (argv also works; absent = named exit 2)
@@ -40,6 +40,7 @@ sandbox suite with no configuration at all.
 | `scripts/pipes_beat.py` | door sweep: every failure leg prints exception CLASS (hash-compare monitors need changing strings); exits 1 on any failure; disclosed wounds ride as NAMED ADVISORY and spend no alert | `=ERR:<class>` lines |
 | `scripts/skin/window.py`, `skin_sampler.py`, `sit_sampler.py` | body windows read the seat's `/api/health` in 2–25 s bursts (meditation, not surveillance); samplers are bounded recorders: window 2–25 s by law, skin_sampler argv seconds (default 3600), sit_sampler argv seconds (default 900) -- run them on a scheduler, not in a bell's hot path | zero captured prints ZERO and exits non-zero; seat failure names the door |
 | `index/build_index.py`, `scripts/molt/*` | index/pointer builders: refuse BEFORE destroying the old artifact; atomic publish WITH tmp unlink on failure; zero-file plans exit 2; report runs on the LIVE connection | `refusing: zero files`, tmp swept |
+| `scripts/cadence_audit.py` | bell census: recurring bells non-green at last fire = LIVE-RED alert (exit 1); one-shot reds = advisory obituaries; cadence misses + counter-chain/phase legs print advisories without firing the alert; paths via ORGANS_JOBS/HOME/LEDGER/BELL_FIRINGS/TZ shims | all-green fixture prints NOTHING and exits 0; recurring-red fixture prints BELL CENSUS RED and exits 1; -O keeps gates (code, not asserts)
 | `scripts/dream_beat.py` | sleep/scheduler leg: checks subprocess returncode, success-marker gate (not path-echo substring) | names the dead leg |
 | `scripts/register_audit.py` | venue register falsifiability sweep | `NO CONTACT` rows booked |
 

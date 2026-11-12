@@ -456,6 +456,29 @@ _cad("clean-green", [{"name": "a", "script": "", "schedule": {"kind": "interval"
 _cad("live-red-alert", [{"name": "dream", "script": "", "schedule": {"kind": "interval", "minutes": 10}, "last_status": "error"}], 1, ("BELL CENSUS RED", "LIVE-RED: dream"))
 _cad("oneshot-red-advisory", [{"name": "old", "script": "", "schedule": {"kind": "once", "run_at": "2026-01-01T00:00:00"}, "last_status": "error"}], 0, ("one-shot reds",), ("LIVE-RED",))
 
+
+# --- dream_beat red-path tests (2026-11-12; sandboxed env pins: NO real store, NO WSL fire) ---
+def _dream(name, live_env, dream_sh_env, want_rc, want_in):
+    _td = tempfile.mkdtemp()
+    _env = dict(os.environ, ORGANS_HOME=_td, ORGANS_SECRETS=_td, ORGANS_SHOP_DIR=_td,
+               ORGANS_LEG_DIR="none", ORGANS_MNEMOS=live_env)
+    if dream_sh_env is None:
+        _env.pop("ORGANS_DREAM_SH", None)
+    else:
+        _env["ORGANS_DREAM_SH"] = dream_sh_env
+    _r = subprocess.run([sys.executable, os.path.join(REPO, "scripts", "dream_beat.py")],
+                        capture_output=True, text=True, env=_env, timeout=120)
+    _out = _r.stdout + _r.stderr
+    record("dream-" + name, _r.returncode == want_rc and all(x in _out for x in want_in),
+           "rc=%d | %s" % (_r.returncode, _out[:90]))
+_dream("missing-store-failclosed", os.path.join(tempfile.mkdtemp(), "absent.db"), None, 1, ("DREAM-RED", "LIVE store missing"))
+_dream("placeholder-gate", os.path.join(tempfile.mkdtemp(), "absent.db"), "/mnt/c/USERshop/x.sh", 1, ("DREAM-RED",))
+# store present + placeholder path -> gate fires BEFORE any WSL call
+import sqlite3 as _s3
+_sdp = os.path.join(tempfile.mkdtemp(), "live.db")
+_c = _s3.connect(_sdp); _c.execute("CREATE TABLE journal_entries(id TEXT)"); _c.execute("CREATE TABLE beliefs(id TEXT)"); _c.commit(); _c.close()
+_dream("placeholder-rejection", _sdp, "/mnt/c/USERshop/x.sh", 2, ("DREAM-SH-UNCONFIGURED",))
+
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
 sys.exit(1 if n_fail else 0)

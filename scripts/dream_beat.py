@@ -36,6 +36,12 @@ DREAM_SH = _cfgkey("dream_sh", os.environ.get("ORGANS_DREAM_SH", "/mnt/c/USER/sh
 STAGE = os.path.join(HOME, "data/dream/mdb-copy.sqlite")
 # N5 cure (C5-16484): dead SH constant deleted -- the real WSL path is the literal at the subprocess leg
 
+def _sh_gate(_s):
+    if "USER" in _s:
+        print("DREAM-SH-UNCONFIGURED: set ORGANS_DREAM_SH (the placeholder default is not a real script) -- exit 2", flush=True)
+        sys.exit(2)  # label/body weld cure: sys.exit(str) rides exit 1 while the message promised 2
+    return _s
+
 def main():
     t0 = time.time()
     os.makedirs(os.path.dirname(STAGE), exist_ok=True)
@@ -57,7 +63,7 @@ def main():
     ck.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     ck.close()
     # 2. dream the hour on the copy, inside WSL
-    p = subprocess.run(["wsl", "-e", "bash", (lambda _s: (_s if "USER" not in _s else sys.exit("DREAM-SH-UNCONFIGURED: set ORGANS_DREAM_SH (the placeholder default is not a real script) -- exit 2")))(DREAM_SH)],
+    p = subprocess.run(["wsl", "-e", "bash", _sh_gate(DREAM_SH)],
                        capture_output=True, text=True, timeout=600)
     # B1 cure (clean-room audit child, deleg_a5592ce2, 2026-11-11): the WSL leg's returncode was
     # never inspected -- a dead WSL route (reboot-ephemeral, per this rig's own LIMITS line) exited 0
