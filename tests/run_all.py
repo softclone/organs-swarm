@@ -243,10 +243,8 @@ record("relay-echo-through", got == b"PING-ORGAN", str(got))
 bi = os.path.join(REPO, "index/build_index.py")
 code, out, tree, *_ = run_rig(bi, lambda p, req: {},
     {"shop/a.md": "# alpha\nhello\n", "shop/sub/b.md": "# beta\nworld\n", "contribution/c.md": "# gamma\n"})
-ok_build = code == 0 and any("index.db" in k for k in tree)
+ok_build = code == 0 and any("index.db" in k for k in tree) and "index.db rebuilt" in out  # wave-5 W01: the promised report asserted ON STDOUT (was promised in a code comment only -- False-Health)
 # zero-file: root dir exists but empty -> refuse exit 2
-import shutil
-open(os.path.join(os.environ["ORGANS_HOME"], "shop", "x.md"), "w").write("x") if os.path.isdir(os.path.join(os.environ["ORGANS_HOME"], "shop")) else None
 import shutil
 for d in ("shop", "contribution"):
     pth = os.path.join(os.environ["ORGANS_HOME"], d)
@@ -260,7 +258,7 @@ except SystemExit as e: c2 = e.code if isinstance(e.code, int) else 1
 except Exception as e: c2 = 90; buf.write(repr(e))
 o2 = buf.getvalue()
 record("build-index-scratch", ok_build, out.strip()[-60:])
-record("build-index-zero-refuse", c2 in (1, 2) and "refus" in o2.lower(), o2.strip()[:60])
+record("build-index-zero-refuse", c2 == 2 and "refus" in o2.lower(), o2.strip()[:60])  # wave-5 W17: rig truth is exit 2; (1,2) tolerated a gate-shaped 1
 
 # ---------- 10. preflight: lookbehind (https:// not a drive path), torn receipts close the gate
 pf = os.path.join(REPO, "scripts/venue/preflight_1f916.py")
@@ -352,10 +350,31 @@ q_bad_file = os.path.join(os.environ["ORGANS_HOME"], "canon/board")
 os.makedirs(q_bad_file, exist_ok=True)
 open(os.path.join(os.environ["ORGANS_HOME"], QF), "w", encoding="utf-8").write(q_badpin)
 sys.argv = ["rig.py"]
+# wave-5 W06: hermetic doors on the -O leg -- GETs answered from a stub, ANY write door raises. The
+# old comment claimed 'no network' with no mock: the leg ran on the LIVE shop seat (green by accident).
+import urllib.request as _uq6
+_real6 = _uq6.urlopen
+class _R6:
+    def __init__(self, d): self._d = d
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def read(self): return json.dumps(self._d).encode()
+def _no_write6(req, timeout=None, **kw):
+    m = getattr(req, "get_method", lambda: "GET")()
+    if m != "GET": raise AssertionError("SUITE -O LEG: write door reached -- " + str(getattr(req, "full_url", req)))
+    u = getattr(req, "full_url", "")
+    if "/api/me" in u: return _R6({"me": {"handle": "suite"}})
+    if "/api/quota" in u: return _R6({"today": {"comments_remaining": 10, "posts_remaining": 3}, "now_utc": "2026-11-12T00:00:00Z"})
+    if "/api/whoami" in u: return _R6({"handle": "suite"})
+    return _R6({})
+_uq6.urlopen = _no_write6
 try:
     with contextlib.redirect_stdout(buf2):
         exec(compile(src_sq, sq, "exec", optimize=2), {"__name__": "__main__", "__file__": sq})
 except SystemExit as e: c_o = e.code if isinstance(e.code, int) else 1
+except AssertionError as e: c_o = 90; buf2.write("WRITE-DOOR-FIRED: " + str(e))
+finally:
+    _uq6.urlopen = _real6
 record("ship-queue-gates-survive-O", c_o == 2 and "GATE:" in buf2.getvalue(), f"rc={c_o} " + buf2.getvalue().strip()[:60])
 
 # counter_head: a ledger with NO Counter pair anywhere -> named refusal, exit 1
@@ -457,7 +476,7 @@ def _cad(name, jobs_obj, want_rc, want_in, want_not=()):
            "rc=%d | %s" % (_r.returncode, _out[:90]))
 _cad("clean-green", [{"name": "a", "script": "", "enabled": True, "schedule": {"kind": "interval", "minutes": 10}, "last_status": "ok"}], 0, (), ("BELL CENSUS",))
 _cad("live-red-alert", [{"name": "dream", "script": "", "enabled": True, "schedule": {"kind": "interval", "minutes": 10}, "last_status": "error"}], 1, ("BELL CENSUS RED", "LIVE-RED: dream"))
-_cad("oneshot-red-advisory", [{"name": "old", "script": "", "enabled": True, "schedule": {"kind": "once", "run_at": "2026-01-01T00:00:00"}, "last_status": "error"}], 0, ("one-shot reds",), ("LIVE-RED",))
+_cad("oneshot-red-advisory", [{"name": "old", "script": "", "enabled": True, "schedule": {"kind": "once", "run_at": "2026-01-01T00:00:00"}, "last_status": "error"}], 0, ("one-shot/disabled reds",), ("LIVE-RED",))  # wave-5 W15: fixtures track the honest label
 
 
 # --- dream_beat red-path tests (2026-11-12; sandboxed env pins: NO real store, NO WSL fire) ---
@@ -475,7 +494,7 @@ def _dream(name, live_env, dream_sh_env, want_rc, want_in):
     record("dream-" + name, _r.returncode == want_rc and all(x in _out for x in want_in),
            "rc=%d | %s" % (_r.returncode, _out[:90]))
 _dream("missing-store-failclosed", os.path.join(tempfile.mkdtemp(), "absent.db"), None, 1, ("DREAM-RED", "LIVE store missing"))
-_dream("placeholder-gate", os.path.join(tempfile.mkdtemp(), "absent.db"), "/mnt/c/USERshop/x.sh", 1, ("DREAM-RED",))
+_dream("sh-gate-missing-store", os.path.join(tempfile.mkdtemp(), "absent.db"), "/mnt/c/USERshop/x.sh", 1, ("DREAM-RED",))
 # store present + placeholder path -> gate fires BEFORE any WSL call
 import sqlite3 as _s3
 _sdp = os.path.join(tempfile.mkdtemp(), "live.db")
@@ -488,7 +507,7 @@ import datetime as _dt4
 # F-08: disabled red bell = obituary, not alert
 _cad("disabled-red-obituary", [{"name": "gone", "script": "", "enabled": False,
       "schedule": {"kind": "interval", "minutes": 10}, "last_status": "error"}],
-     0, ("one-shot reds",), ("LIVE-RED",))
+     0, ("one-shot/disabled reds",), ("LIVE-RED",))  # wave-5 W15: fixtures track the honest label
 # misses leg exercised: scheduled interval bell with stale last_run_at must MISS and alert
 _stale = (_dt4.datetime.now(_dt4.timezone.utc) - _dt4.timedelta(hours=10)).isoformat()
 _cad("cadence-miss-alert", [{"name": "missed", "script": "", "enabled": True, "state": "scheduled",
@@ -505,10 +524,10 @@ def _silence4():
         "| C5-1 | t | mint | Counter 7134->7135 |\n| C5-2 | t | mint | Counter 7135->7136 |\n")
     with open(os.path.join(_td, "firings.jsonl"), "w", encoding="utf-8") as fh:
         for k in range(4):
-            fh.write(json.dumps({"name": "a", "ts": _dt4.datetime.fromtimestamp(_now.timestamp() - k * 600, _dt4.timezone.utc).isoformat()}) + "\n")
+            fh.write(json.dumps({"job": "a", "last_run": _dt4.datetime.fromtimestamp(_now.timestamp() - k * 600, _dt4.timezone.utc).isoformat()}) + "\n")  # wave-5 W16: real firings-store grammar (job/last_run); name/ts made every phase leg skip silently
     r = subprocess.run([sys.executable, os.path.join(REPO, "scripts", "cadence_audit.py")], capture_output=True, text=True, timeout=120,
         env=dict(os.environ, ORGANS_JOBS=os.path.join(_td, "jobs.json"), ORGANS_LEDGER=os.path.join(_td, "ledger.md"),
-                 ORGANS_BELL_FIRINGS=os.path.join(_td, "firings.jsonl"), ORGANS_HOME=_td, ORGANS_TZ_OFFSET="-6"))
+                 ORGANS_BELL_FIRINGS=os.path.join(_td, "firings.jsonl"), ORGANS_HOME=_td, ORGANS_TZ_OFFSET="-6", ORGANS_ROW_PREFIX="C5"))  # wave-5 W20 companion: fixture carries the prefix grammar
     record("cadence-clean-full-silence", r.returncode == 0 and (r.stdout + r.stderr).strip() == "",
            f"rc={r.returncode} out={repr((r.stdout + r.stderr)[:80])}")
 _silence4()
@@ -551,8 +570,8 @@ record("preflight-union-store-dedup", code == 1 and "dup" in out, f"rc={code} {o
 # F-10: ship_post screen grammar == preflight's (case-insensitive, hex40 without =)
 _hx = os.path.join(tempfile.mkdtemp(prefix="hx_"), "b.md")
 open(_hx, "w", encoding="utf-8").write("pin quote 36A8DD2614FCDEDA" + "A" * 48 + "\n")
-code, out, *_ = run_rig(os.path.join(REPO, "scripts/venue/ship_post_20261111.py"), lambda p, req: {}, {}, argv=["t", _hx])
-record("ship-post-screen-hex40", code == 2, f"rc={code} {out.strip()[:60]}")
+code, out, *_ = run_rig(os.path.join(REPO, "scripts/venue/ship_post_20261111.py"), lambda p, req: {}, {}, argv=["probe title", _hx])
+record("ship-post-screen-hex40", code == 2 and "SCREEN" in out, f"rc={code} {out.strip()[:60]}")  # wave-5 W05: valid title + named refusal ON STDOUT is the proof; bare rc 2 also fires on arg-count accidents
 # F-01b: ship_post pid gate survives -O: exec optimize=2 with a door that answers WITHOUT post_id
 # (mocked urlopen -- zero real network), expect rc 2 + named refusal + NO receipt file.
 def _opid_leg():
@@ -585,6 +604,94 @@ _opid_leg()
 _gj = os.path.join(tempfile.mkdtemp(prefix="gj_"), "junk.gguf"); open(_gj, "w").write("junkjunkjunkjunk")
 _r = subprocess.run([sys.executable, "-O", os.path.join(REPO, "scripts/molt/gguf_hist.py"), _gj], capture_output=True, text=True, timeout=60)
 record("gguf-magic-gate-survives-O", _r.returncode == 2 and "NOT A GGUF" in (_r.stdout + _r.stderr), f"rc={_r.returncode}")
+
+# ---------- wave-5 cures (deleg_cd0d5a8e): the red-paths the wave-4 suite left blind ----------
+import urllib.error as _ue5
+import sqlite3 as _s3w5
+
+# W04 (LAWS #22): readback death must LAND the receipt before exit 1 -- no blind re-ring
+def router_rd(p, req):
+    if p.startswith("/api/post/100") and req.data is None: return {"comments": [], "has_more": False, "post": {"body": "post body"}}
+    if p == "/api/me": return {"me": {"handle": "tester", "today": {"comments_remaining": 8}}}
+    if p == "/api/comment" and req.data: return {"comment_id": 7}
+    if p.startswith("/api/comment/7") and req.data is None: raise _ue5.URLError("suite readback death")
+    return {}
+code, out, tree, calls, home5 = run_rig(sq, router_rd, {QF: q_green})
+_rec5 = [k for k in tree if k.startswith("data/ship-queue-receipts")]
+record("ship-queue-readback-death-lands-receipt",
+       code == 1 and "READBACK DEATH" in out and bool(_rec5)
+       and '"comment_id": 7' in tree[_rec5[0]] and '"readback": "DEAD' in tree[_rec5[0]],
+       out.strip()[-70:])
+
+# W03: preflight dedup must read ship_post receipts' post_id field (it wrote post_id; preflight read gid/pin only)
+code, out, *_ = run_rig(pf, router_pf, {
+    "ledgers/CORPUS.md": "| C5-1 | 2026-11-12T00:00:00Z | mint |" + chr(10),
+    "data/ship-post-receipt-9.json": json.dumps({"post_id": "gid-spost", "cid": 9})},
+    argv=[bp, "gid-spost"])
+record("preflight-ship-post-receipt-dedup", code == 1 and "dup" in out, out.strip()[-60:])
+
+# W14: forwarder port follows the SCHEME (https -> 443; was scheme-blind 80)
+os.environ["ORGANS_SEAT_URL"] = "https://seat.example"
+_fw5 = os.path.join(REPO, "scripts/fwd_18080.py")
+_ns5 = {"__name__": "lib", "__file__": _fw5}
+try:
+    exec(compile(open(_fw5, encoding="utf-8").read().replace(chr(13) + chr(10), chr(10)), _fw5, "exec"), _ns5)
+    _t5 = _ns5.get("TARGET")
+except Exception as _e5:
+    _t5 = "EXC " + repr(_e5)
+del os.environ["ORGANS_SEAT_URL"]
+record("fwd-https-port-443", _t5 == ("seat.example", 443), str(_t5))
+
+# W02: config index_rules outrank EVERY extension catch-all (.md->prose shadowed them)
+_td5 = tempfile.mkdtemp(prefix="bi5_"); _kits = os.path.join(_td5, "kitsrc", "index"); os.makedirs(_kits)
+shutil.copy(os.path.join(REPO, "index/build_index.py"), os.path.join(_kits, "build_index.py"))
+open(os.path.join(_kits, "local.json"), "w", encoding="utf-8").write(json.dumps({"index_rules": [["kid-thing", "kid-letter"]]}))
+_shop5 = os.path.join(_td5, "shop"); os.makedirs(_shop5, exist_ok=True)
+_leg5 = os.path.join(_td5, "leg"); os.makedirs(_leg5, exist_ok=True)  # LEG root exists empty (rig refuses missing roots)
+open(os.path.join(_shop5, "kid-thing.md"), "w", encoding="utf-8").write("# kid" + chr(10))
+_bi5 = os.path.join(_kits, "build_index.py")
+_saved5 = os.environ.get("ORGANS_HOME"); _saved5s = os.environ.get("ORGANS_SHOP_DIR")
+os.environ["ORGANS_HOME"] = _td5
+os.environ["ORGANS_SHOP_DIR"] = _shop5  # the fixture's indexed root IS the scratch shop (config would resolve to the live shop)
+os.environ["ORGANS_LEG_DIR"] = _leg5
+_buf5 = io.StringIO()
+try:
+    with contextlib.redirect_stdout(_buf5):
+        exec(compile(open(_bi5, encoding="utf-8").read().replace(chr(13) + chr(10), chr(10)), _bi5, "exec"),
+             {"__name__": "__main__", "__file__": _bi5})
+    _con5 = _s3w5.connect(os.path.join(_shop5, "index", "index.db"))
+    _fam5 = _con5.execute("SELECT family FROM files WHERE name = ?", ("kid-thing.md",)).fetchall()
+    _con5.close()
+except (Exception, SystemExit) as _e5:  # SystemExit is a BaseException -- rig mains exit via it
+    _fam5 = [("EXC " + repr(_e5) + " | out: " + _buf5.getvalue().strip()[-160:])]
+finally:
+    if _saved5 is None: os.environ.pop("ORGANS_HOME", None)
+    else: os.environ["ORGANS_HOME"] = _saved5
+    if _saved5s is None: os.environ.pop("ORGANS_SHOP_DIR", None)
+    else: os.environ["ORGANS_SHOP_DIR"] = _saved5s
+record("index-config-rules-outrank-catchall", _fam5 == [("kid-letter",)], str(_fam5))
+
+# W07 (LAWS #23): zero-content samplers refuse. Dead seat door + nvidia-smi resolving to a
+# CWD decoy that dies on the query args => rows of timestamps/None-reads only => exit 1.
+_nv5 = tempfile.mkdtemp(prefix="nv5_")
+shutil.copy(sys.executable, os.path.join(_nv5, "nvidia-smi.exe"))
+_hr5 = tempfile.mkdtemp(prefix="zh5_")
+for _rgs5, _args5 in (("skin_sampler.py", ["1"]), ("sit_sampler.py", ["1", "w5zero"])):
+    _r5 = subprocess.run([sys.executable, os.path.join(REPO, "scripts/skin", _rgs5)] + _args5,
+                         cwd=_nv5, capture_output=True, text=True, timeout=90,
+                         env=dict(os.environ, ORGANS_HOME=_hr5, ORGANS_SEAT_URL="http://127.0.0.1:1"))
+    record("sampler-zero-content-refuse-" + _rgs5.split(".")[0],
+           _r5.returncode == 1 and "ZERO-content" in _r5.stdout,
+           "rc=" + str(_r5.returncode) + " " + _r5.stdout.strip()[-50:])
+
+# W08: malformed cadence env is a READER advisory -- config defect, never a bell alert, never a crash
+_r5 = subprocess.run([sys.executable, os.path.join(REPO, "scripts/cadence_audit.py")],
+                     capture_output=True, text=True, timeout=150,
+                     env=dict(os.environ, ORGANS_COUNTER_WINDOW="abc", ORGANS_TZ_OFFSET="zz"))
+_o5 = _r5.stdout + _r5.stderr
+record("cadence-malformed-env-is-reader-advisory",
+       "READER ADVISORY" in _o5 and "Traceback" not in _o5 and "BELL CENSUS" in _o5,
+       _o5[:70])
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")

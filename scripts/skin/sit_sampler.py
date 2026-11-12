@@ -55,9 +55,9 @@ def metrics():
     # 0.2.13 body door: /api/health JSON (engine{} /metrics era retired, C5-16484)
     try:
         h = json.loads(urllib.request.urlopen(_SEAT + "/api/health", timeout=3).read().decode())
-        eng = (h.get("engine") or {})
+        # wave-5 W19: engine{} read REMOVED -- the 0.2.13 door never carries it; it emitted engine_slot=None on every row (dead grammar, C5-16484)
         return ["ok=%s" % h.get("ok"), "uptime=%s" % h.get("uptimeSec"),
-                "clients=%s" % h.get("clients"), "engine_slot=%s" % eng.get("status")]
+                "clients=%s" % h.get("clients")]  # W19: engine_slot dropped (row-shape change disclosed)
     except Exception as e:
         return ["ERR:" + str(e)[:60]]
 
@@ -73,9 +73,15 @@ def proc():
 with open(out, "a", encoding="utf-8") as f:
     t_end = time.time() + secs
     n = 0
+    real = 0
     while time.time() < t_end:
         row = {"wall": datetime.datetime.now().strftime("%H:%M:%S"),
                "nv": nvidia(), "metrics": metrics(), "proc": proc()}
         f.write(json.dumps(row) + "\n"); f.flush(); n += 1
+        if isinstance(row.get("nv"), dict) and row["nv"].get("tC") is not None:
+            real += 1  # wave-5 W07: rows without GPU metrics capture nothing (LAWS #23)
         time.sleep(2)
     print(f"SIT COMPLETE {label}: {n} rows -> {out}")
+if real == 0:  # wave-5 W07: zero-content is not a green run (LAWS #23)
+    print("ZERO-content sit rows: no GPU metrics in any of", n," rows -- exit 1")
+    sys.exit(1)

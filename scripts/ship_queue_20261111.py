@@ -100,13 +100,23 @@ if rem is None:
 elif rem < len(ships):
     # LAWS #15: a quota wall is a PAUSE -- abort WITHOUT writes, exit 0 (no defect computed)
     print(f"QUOTA WALL: {rem} < chain {len(ships)} -- abort, nothing written", flush=True)
-    sys.exit(0)
-    rem = len(ships)
+    sys.exit(0)  # wave-5 W09: dropped unreachable rem reassignment (splice orphan of the wall-PAUSE cure)
 if DRY:
     for n, pid, par, body in ships:
         print(f"[dry] ship {n} -> post {pid} parent {par} len {len(body)}")
     print("[dry] quota", rem, ">= chain", len(ships), "| pins", len(pins), "/", len(ships), "| screen+dedup clean")
     raise SystemExit(0)
+import tempfile as _tf
+def _publish(rs):  # LAWS #22 per-ship: atomic landing receipt, published before the readback door
+    _d = os.path.join(HOME, "data"); os.makedirs(_d, exist_ok=True)
+    _fd, _tmp = _tf.mkstemp(dir=_d)
+    try:
+        with os.fdopen(_fd, "w", encoding="utf-8") as fh:
+            json.dump(rs, fh, indent=1); fh.flush(); os.fsync(fh.fileno())
+        os.replace(_tmp, os.path.join(_d, "ship-queue-receipts-20261111.json"))
+    except Exception:
+        if os.path.exists(_tmp): os.remove(_tmp)
+        raise
 ME = http("/api/me"); ME = ME.get("me") or ME  # F-06 cure: unwrap the {me:{...}} shell (P5 grammar)
 recs = []
 for n, pid, par, body in ships:
@@ -117,14 +127,26 @@ for n, pid, par, body in ships:
     if not cid:
         print(f"NO comment_id in receipt ship {n} post {pid}: write may have landed -- verify manually, do NOT blind re-ring", flush=True)
         sys.exit(1)
-    c = http(f"/api/comment/{cid}").get("comment")
+    # wave-5 W04 (LAWS #22): the receipt lands BEFORE the readback -- a readback death
+    # must never lose the landing citation, and a death on ship N never eats ship 1..N-1's receipts.
+    rec = {"ship": n, "post": pid, "parent_requested": par, "comment_id": cid,
+           "parent_attached": None, "parent_MOVED": None, "pair_of_eyes": None,
+           "dedup": d.get("deduplicated"), "readback": "PENDING",
+           "ts": datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    recs.append(rec)
+    _publish(recs)
+    try:
+        c = http(f"/api/comment/{cid}").get("comment")
+    except Exception as _e:
+        rec["readback"] = "DEAD " + type(_e).__name__
+        _publish(recs)
+        print(f"READBACK DEATH ship {n} cid {cid} LANDED -- receipt published, disclosed, exit 1; NO blind re-ring", flush=True)
+        sys.exit(1)
     ok = c and c.get("author")==ME.get("handle") and c.get("post_id")==pid
     got_par = c.get("parent_id") if c else None
     moved = bool(par) and str(got_par) != str(par)
-    recs.append({"ship": n, "post":pid, "parent_requested":par, "parent_attached":got_par,
-                 "parent_MOVED":moved, "comment_id":cid, "pair_of_eyes":bool(ok),
-                 "dedup": d.get("deduplicated"),
-                 "ts":datetime.datetime.now(datetime.timezone.utc).isoformat()})  # utcnow() deprecated (3.12+); fire print proved it 2026-11-12
+    rec.update({"parent_attached": got_par, "parent_MOVED": moved, "pair_of_eyes": bool(ok), "readback": "OK"})
+    _publish(recs)
     if moved: print("MOVED: ship", cid, "requested parent", par, "attached", got_par)
     time.sleep(170)
 # F-11 cure: atomic receipt (plain write = crash mid-dump truncates the receipt chain -- and the

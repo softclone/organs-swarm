@@ -32,7 +32,7 @@ FAMS = [
  (r"eros-taste-notes-\d+\.md","taste"),(r"eros-\d+\.md","eros"),(r"MEDITATION-\d+\.md","medit"),
  (r"meditation-\d+\.md","medit"),(r"journal-core-\d+\.md","diary"),(r"journal-note-\d+\.md","board-journal"),
  (r"journal-\d+\.md","diary"),(r"pole-\d+\.md","pole"),(r"weekly-scene-\d+\.md","scene"),
- (r"DREAM\S*\.md","dream"),  # estate-specific file-name grammar rides config "index_rules": [[regex, family], ...] (wave-4 F-12: identity grammar lives in config, not code)
+ (r"DREAM\S*\.md","dream"),  # wave-5 W11 truth: shop-GENRE file patterns are built-in defaults; estate IDENTITY grammar (handles, names) rides config "index_rules": [[regex, family], ...]
  (r".*\.pyc","byproduct"),(r".*\.py$","code"),(r".*\.jsonl","data"),(r".*\.json","data"),
  (r".*\.md","doc"),(r".*\.txt","data"),(r".*\.log","byproduct"),(r".*\.mp3$|.*\.wav$","media"),
  (r".*\.npy$|.*\.npz$","data"),(r".*\.gz$","byproduct"),(r".*\.claimed$","data"),(r".*\.pid$","byproduct"),
@@ -43,7 +43,8 @@ for _q in (os.path.join(os.path.dirname(os.path.abspath(__file__)), "local.json"
     try:
         _extra = json.load(open(_q, encoding="utf-8")).get("index_rules")
         if _extra:
-            FAMS = FAMS[:-1] + [(r, f) for r, f in _extra] + FAMS[-1:]  # estate grammar before the catch-all (wave-4 F-12)
+            _cut = next((i for i, (pat, _f) in enumerate(FAMS) if pat.startswith(".*")), len(FAMS) - 1)  # wave-5 W02: config rules outrank EVERY extension catch-all, not just the final .*->misc
+            FAMS = FAMS[:_cut] + [(r, f) for r, f in _extra] + FAMS[_cut:]
             break
     except Exception: pass
 def fam(n):
@@ -109,12 +110,13 @@ def main():
             con.close()
             os.remove(tmp)
             sys.exit(2)
-        _report = f"index.db rebuilt: {n} files at {ts} | stat-skips disclosed: {SKIPS[0]}"  # wave-4 F-16: report prints AFTER os.replace publishes
+        _report = f"index.db rebuilt: {n} files at {ts} | stat-skips disclosed: {SKIPS[0]}"
         print("canon families outside expected dirs (primary):")
         for f, d, c in cur.execute("SELECT family,dir,c FROM canon_outside ORDER BY c DESC"):
             print(f"  {c:6d}  {f:5s} in {d}")
         con.close()
         os.replace(tmp, DB)  # F1/F3 cure: publish LAST, after the report on a LIVE connection
+        print(_report, flush=True)  # wave-5 W01: the promised report NOW prints (was computed, never emitted)
     except Exception:
         if os.path.exists(tmp):
             os.remove(tmp)  # F4 cure: no .tmp residue on failure paths

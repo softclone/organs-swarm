@@ -64,6 +64,7 @@ def gpu():
     except Exception:
         return None, None, None
 
+_real_rows = 0  # wave-5 W07: rows carrying real metrics (LAWS #23)
 while time.time() < _t_end:
     t0 = time.time()
     rec = {"t": round(t0, 2)}
@@ -77,6 +78,13 @@ while time.time() < _t_end:
         rec["clients"] = m.get("clients")
     with open(out_path(), "a", encoding="utf-8") as f:
         f.write(json.dumps(rec) + "\n")
+    if any(v is not None for k, v in rec.items() if k != "t"):  # wave-5 W07 (LAWS #23): timestamp-only rows and all-None-read rows capture nothing
+        _real_rows += 1
     dt = time.time() - t0
     if dt < 0.5:
         time.sleep(0.5 - dt)
+
+# wave-5 W07: zero captured is not a green run (LAWS #23 -- window.py's refusal, now its siblings too)
+if _real_rows == 0:
+    print("ZERO-content samples: recorder captured nothing but timestamps -- exit 1")
+    sys.exit(1)

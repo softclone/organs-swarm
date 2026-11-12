@@ -10,7 +10,7 @@ def _organs_home():
 HOME = _organs_home()
 
 # strata_forward_18080.py - shop-side TCP forwarder: WSL dream seat route (keeper order 2026-11-07)
-# Forwards LISTEN -> TARGET (env-shim; 8080-era default retired with the 0.2.13 re-stamp -- the
+# Forwards LISTEN -> TARGET (env-shim; the DISCLOSED portable default is :8080, overridable via config -- the
 # TARGET value travels with the repo, per the F-18 audit nit: comments must not cite dead ports).
 import socket, threading, sys
 
@@ -26,7 +26,7 @@ def _target():
             except Exception: pass
     u = u or "http://127.0.0.1:8080"
     p = _up.urlparse(u)
-    return (p.hostname, p.port or 80)  # wave-4 F-12: seat target from config, no baked estate port
+    return (p.hostname, p.port or (443 if p.scheme == "https" else 80))  # wave-5 W14: port defaults BY SCHEME (was scheme-blind 80)
 TARGET = _target()
 
 def pipe(src, dst):

@@ -24,7 +24,13 @@ def _jobs_path():
     return _os.path.expanduser("~/.hermes/cron/jobs.json")
 JOBS = _jobs_path()
 
-NAIVE_TZ = datetime.timezone(datetime.timedelta(hours=int(os.environ.get("ORGANS_TZ_OFFSET", "-6"))))  # profile local zone; shim ORGANS_TZ_OFFSET (default -6 CST, disclosed)
+def _envint(name, default):  # wave-5 W08: a config defect is a reader defect; it must NEVER alert as a bell defect (header law)
+    try:
+        return int(os.environ.get(name, default))
+    except ValueError:
+        print(f"READER ADVISORY: malformed {name} -- using default {default} (config defect, not a bell defect)")
+        return int(default)
+NAIVE_TZ = datetime.timezone(datetime.timedelta(hours=_envint("ORGANS_TZ_OFFSET", "-6")))  # profile local zone; shim ORGANS_TZ_OFFSET (default -6 CST, disclosed)
 
 def load_jobs():
     for tries in range(3):
@@ -114,7 +120,12 @@ if misses:
     print("AUDIT: a bell dropped its cadence — wake the shop.")
 
 # C5-1997 counter chain-break leg -- ADVISORY; prints ONLY on real breaks/dups (quiet cure)
-_cw = tuple(int(v) for v in os.environ.get("ORGANS_COUNTER_WINDOW", "5000,10000").split(","))
+_cw_raw = os.environ.get("ORGANS_COUNTER_WINDOW", "5000,10000").split(",")
+try:
+    _cw = (int(_cw_raw[0]), int(_cw_raw[1]))
+except (ValueError, IndexError):
+    print("READER ADVISORY: malformed ORGANS_COUNTER_WINDOW -- using default (5000,10000) (config defect, not a bell defect)")
+    _cw = (5000, 10000)
 counter_miss = False
 try:
     _lp = os.environ.get("ORGANS_LEDGER")
@@ -125,7 +136,18 @@ try:
                 if _lp: break
             except Exception: pass
     _d = open(_lp or os.path.expanduser("~/shop/ledgers/CORPUS.md"), encoding="utf-8").read()
-    _rows = re.findall(r"\| %s-(\d+) " % os.environ.get("ORGANS_ROW_PREFIX", "C5"), _d)  # wave-4 F-09: row prefix config-driven (portable)
+    _prefix = os.environ.get("ORGANS_ROW_PREFIX")  # wave-5 W20: NO shop identity in the portable default; unset = inert + disclosed; re.escape keeps it injection-safe
+    if not _prefix:  # follows the shop config chain like every other organ value (env -> local.json -> ~/organs.json)
+        for _cf in (_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "local.json"), _os.path.expanduser("~/organs.json")):
+            try:
+                v = _json.load(open(_cf, encoding="utf-8")).get("row_prefix")
+                if v: _prefix = v; break
+            except Exception: pass
+    if not _prefix:
+        print("COUNTER LEG INERT (advisory): ORGANS_ROW_PREFIX not configured -- shop ledger grammar is a config value")
+        _rows = []
+    else:
+        _rows = re.findall(r"\| " + re.escape(_prefix) + r"-(\d+) ", _d)
     _pairs = [tuple(map(int, x)) for x in re.findall(r"[Cc]ounter\s+(\d{4,5})->(\d{4,5})", _d) if _cw[0] < int(x[1]) < _cw[1]]  # wave-4 F-09b: counter window config-driven
     _breaks = sum(1 for a, b in zip(_pairs, _pairs[1:]) if a[1] != b[0])
     _dups = sorted({n for n in _rows if _rows.count(n) > 2})  # 2026-11-11 rebalance: label pairs = booked collision class (register-policed, append-only); counts >2 = serial-gate breach
@@ -203,7 +225,7 @@ if live_reds:
     for _n, _s in live_reds[:12]:
         print("  LIVE-RED:", _n, "|", _s)
 if hist_reds:
-    print("BELL CENSUS: %d one-shot reds (disclosed history, advisory)" % hist_reds)
+    print("BELL CENSUS: %d one-shot/disabled reds (disclosed history, advisory)" % hist_reds)  # wave-5 W15: label names what is counted (kind-once AND disabled)
 
 # exit discipline (cure): non-zero IFF a real defect; clean night = silent exit 0, empty stdout = no delivery
 # 2026-11-11: advisory prints (counter-chain drift bound, phase drift) do NOT fire the keeper alert;

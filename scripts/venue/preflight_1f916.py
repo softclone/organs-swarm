@@ -91,7 +91,7 @@ def main():
                 if not isinstance(rec, dict):
                     corrupt += 1
                     continue
-                g = rec.get("gid") or rec.get("pin")  # queue stores ride pins; gid/pin both count
+                g = rec.get("gid") or rec.get("pin") or rec.get("post_id")  # wave-5 W03: ship_post receipts ride post_id -- union reads all three id fields
                 # P3/N1 cures kept: typed compare, total, crash-closed on any throw.
                 if g == gid or str(g) == str(gid):
                     dup.append(_rp)

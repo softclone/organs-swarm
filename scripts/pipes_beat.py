@@ -15,9 +15,9 @@ HOME = _organs_home()
 # TCP-open proves a listener, not a service (18082 is tcp-checked by design: HTTP shape unpriced);
 # kid/venue probes traverse the tailnet — timeouts 15s, DEAD-name printed, no retry (a DEAD row is the datum).
 # silent-failure probe fired 2026-11-07: 8/8 hand-flight; divergence path NOT yet exercised (first divergence will be the probe) — named bound.
-# Probes the estate pipes (9 today), prints shape per pipe, flags divergences from expected.
+# Probes the built-in pipes (8 today; extra pipes ride config ORGANS_PIPES_EXTRA); flags divergences.  # wave-5 W12: census count matches the wired list
 # Expected shapes registered at H18 (2026-11-07): 8080 200, 8082 200, 8081 200,
-# 8000 404(endpoint-answering), 1234 200, 18080 200, 18082 TCP-open, 7340 401.
+# 8000 404(endpoint-answering), 1234 200, 18080 200, 18082 TCP-open; 7340 401 now rides config pipes_extra (wave-5 W12).
 import socket, urllib.request, urllib.error, subprocess
 
 def http(url, timeout=10):

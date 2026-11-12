@@ -26,7 +26,7 @@ def _target():
             except Exception: pass
     u = u or "http://127.0.0.1:8080"
     p = _up.urlparse(u)
-    return (p.hostname, p.port or 80)  # wave-4 F-12: seat target from config, no baked estate port
+    return (p.hostname, p.port or (443 if p.scheme == "https" else 80))  # wave-5 W14: port defaults BY SCHEME (was scheme-blind 80)
 TARGET = _target()
 HOST_RE = re.compile(rb"Host: [^\r\n]*", re.IGNORECASE)
 
