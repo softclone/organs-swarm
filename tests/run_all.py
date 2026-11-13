@@ -980,6 +980,49 @@ code, out, *_ = run_rig(sq, _router_nd7, {QF: q_green})
 record("w7-queue-nondict-write-door-closed-F5", code == 1 and "WRITE DOOR NON-DICT" in out and "Traceback (most recent call last)" not in out,
        "rc=" + str(code) + " " + out.strip()[-70:])
 
+# ---------- venue-rig family legs (packaging cure 2026-11-13; F-META law: fire fixtures at the
+# real door, zero network): runlib venue() guards, SEC-chain resolution, sweep cold-seed refusal
+import importlib as _il
+_scr = tempfile.mkdtemp(prefix="organs_v_")
+_sec = os.path.join(_scr, "sec"); os.makedirs(_sec)
+json.dump({"resident_key": "test-resident-key"}, open(os.path.join(_sec, "1f3d9.json"), "w"))
+os.environ["ORGANS_SECRETS"] = _sec
+os.environ["ORGANS_HOME"] = os.path.join(_scr, "home")
+sys.path.insert(0, os.path.join(REPO, "scripts"))
+_rl = _il.import_module("runlib")
+_real = urllib.request.urlopen
+def _mkdoor(obj):
+    def _d(req, timeout=None): return FakeResp(json.dumps(obj).encode())
+    return _d
+for _nm, _door, _want in (
+    ("iserror", _mkdoor({"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\"error_class\":\"bad_input\"}"}],"isError":True}}), "TOOL-ERR"),
+    ("empty", _mkdoor({"jsonrpc":"2.0","id":1,"result":{"content":[]}}), "RPC-EMPTY"),
+    ("nonjson", _mkdoor({"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"not json at all"}],"isError":False}}), "RPC-NONJSON"),
+    ("ok-shape", _mkdoor({"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\"change_marker\":\"99\"}"}],"isError":False}}), None)):
+    urllib.request.urlopen = _door
+    _b = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(_b):
+            _r = _rl.venue("changes", {"since": "1", "limit": 1})
+    finally:
+        urllib.request.urlopen = _real
+    _ok = (_r is None and _want in _b.getvalue()) if _want else (isinstance(_r, dict) and _r.get("change_marker") == "99")
+    record(f"venue-door-{_nm}", _ok, _b.getvalue().strip()[:60])
+record("venue-sec-chain-resolves", os.path.isfile(os.path.join(_rl._organs_sec(), "1f3d9.json")),
+       "token file lands at the SEC chain door")
+record("venue-home-chain-env-wins", _rl._organs_home() == os.path.join(_scr, "home"), "env outranks config files")
+_scr2 = tempfile.mkdtemp(prefix="organs_s_"); _sec2 = os.path.join(_scr2, "sec"); os.makedirs(_sec2)
+_routes_scr = os.path.join(_scr2, "ROUTES.md")
+open(_routes_scr, "w", encoding="utf-8").write("venue door: changes rides POST /mcp tools/call on https://1f3d9.com/mcp; limit int, since string\n")
+# NO 1f3d9.json in _sec2: token open dies inside venue() -> rig's seed try catches -> refuse blind sweep
+code, out, *_ = run_rig(os.path.join(REPO, "scripts/sweep_organ_v2.py"), lambda p, req: {},
+                        env={"ORGANS_SECRETS": _sec2, "ORGANS_ROUTES": _routes_scr})
+record("sweep-coldseed-dead-door-exit2", code == 2 and "SEED-FAIL" in out and "Traceback (most recent call last)" not in out,
+       "rc=" + str(code) + " " + out.strip()[-70:])
+_sg = _il.import_module("scan_organ")
+record("scan-organ-twin-behavior", _sg.gate("plain prose with no shape at all") == []
+       and len(_sg.gate("Bearer AbCdEf1234567890AbCdEf1234567890")) >= 1, "clean [] / token flagged")
+
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
 sys.exit(1 if n_fail else 0)
