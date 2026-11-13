@@ -1023,6 +1023,44 @@ _sg = _il.import_module("scan_organ")
 record("scan-organ-twin-behavior", _sg.gate("plain prose with no shape at all") == []
        and len(_sg.gate("Bearer AbCdEf1234567890AbCdEf1234567890")) >= 1, "clean [] / token flagged")
 
+# after_restart organ legs (2026-11-13, behavior-at-door): probe routes fired at fixture doors.
+# Green leg: all fixture doors 200 -> rc0 reds0. Red leg: honcho door aimed at a CLOSED port ->
+# rc2 and a RED row. relit() itself is never fired in-suite (it binds estate twin ports);
+# its upstream-dead guard specimen lives in the estate census log (data/after-restart.log).
+import http.server, socketserver, threading
+class _ArFx(http.server.BaseHTTPRequestHandler):
+    def _send(self, code, body):
+        self.send_response(code); self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    def do_GET(self):
+        self._send(200, b'{"object":"list","data":[]}') if self.path.startswith("/v1/models") else self._send(404, b"{}")
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("Content-Length", "0") or 0))
+        self._send(200, b'[]') if self.path.endswith("/conclusions/query") else self._send(404, b"{}")
+    def log_message(self, *a): pass
+_ar_srv = socketserver.TCPServer(("127.0.0.1", 0), _ArFx)
+threading.Thread(target=_ar_srv.serve_forever, daemon=True).start()
+_fx = "http://127.0.0.1:%d" % _ar_srv.server_address[1]
+_ar = os.path.join(REPO, "scripts/after_restart.py")
+def _ar_run(env):
+    r = subprocess.run([sys.executable, _ar, "--probe-only", "--json"], capture_output=True, text=True, timeout=90, env=env)
+    row = next((l for l in r.stdout.splitlines() if l.startswith("{")), "{}")
+    return r, json.loads(row)
+_ar_env = dict(os.environ, ORGANS_SEAT_URL=_fx, ORGANS_HONCHO_URL=_fx, ORGANS_EMBED_URL=_fx, ORGANS_SKIP_DOCKER="1")
+_r, _d = _ar_run(_ar_env)
+record("after-restart-probe-green",
+       _r.returncode == 0 and _d.get("reds") == 0
+       and all(s in ("PASS", "SKIP(env)") for n, c, s in _d["rows"] if c == "core")
+       and any(n.startswith("twin-") for n, c, s in _d["rows"]),
+       f"rc={_r.returncode} rows={len(_d.get('rows', []))}")
+_ck = socket.socket(); _ck.bind(("127.0.0.1", 0)); _cp = _ck.getsockname()[1]; _ck.close()
+_r2, _d2 = _ar_run(dict(_ar_env, ORGANS_HONCHO_URL="http://127.0.0.1:%d" % _cp))
+record("after-restart-red-path-exit2",
+       _r2.returncode == 2 and _d2.get("reds", 0) >= 1
+       and any(n == "honcho-:8000" and "RED" in s for n, c, s in _d2["rows"]),
+       f"rc={_r2.returncode} reds={_d2.get('reds')}")
+_ar_srv.shutdown()
+
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
 sys.exit(1 if n_fail else 0)
