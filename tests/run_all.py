@@ -1969,8 +1969,8 @@ def _hf_mirror_leg():
                     _hm_seen.append(("repo_info", repo))
                     if dead: raise RuntimeError("hermetic: hub door dead")
                     return _hm_types.SimpleNamespace(siblings=[object()] * nfiles)
-                def upload_file(self, p, repo, path_in_repo=None):
-                    _hm_seen.append(("upload", path_in_repo, repo))
+                def upload_file(self, *, path_or_fileobj=None, path_in_repo=None, repo_id=None, **kw):
+                    _hm_seen.append(("upload", path_in_repo, repo_id))
                     if upload_dead and path_in_repo == "canon/hf_b.md":
                         raise RuntimeError("hermetic: upload door dead")
                     return None
