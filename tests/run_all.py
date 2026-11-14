@@ -1069,6 +1069,7 @@ _ar_srv.shutdown()
 MANIFEST_PY = [
     'index/build_index.py',
     'scripts/after_restart.py',
+    'scripts/bar_audit.py',
     'scripts/boardwalk_beat.py',
     'scripts/cadence_audit.py',
     'scripts/census_organ.py',
@@ -1566,6 +1567,189 @@ def _seat_score_leg():
         if _saved_seat is None: os.environ.pop("ORGANS_SEAT_URL", None)
         else: os.environ["ORGANS_SEAT_URL"] = _saved_seat
 _seat_score_leg()
+
+# ---------- bar-audit-gates (Tier-1 bar_audit organ: the 107-copy _hot*_hip cold-seat
+# audit family distilled; parse-verdict containment gate, keep-first O_EXCL, maxtok floor
+# 131072, door-path + non-JSON cures IN CODE). Fires through run_rig on a SCRATCH COPY
+# with local.json BESIDE it (config-chain locality datum: the host's ~/organs.json must
+# never leak into the sandbox; the pins live beside the rig). Fixtures live in
+# tests/fixtures/ -- a missing fixture records a NAMED FAIL, never a harness crash.
+# Fires: (a) --dry two fixture pieces (+ --bar override dry) -> rc0 COMPUTED byte counts,
+# ZERO door calls, no store; (b) arg-shape refusals rc2 before any door: verbless,
+# missing --pieces, bad entry, empty name/PATH, valueless --pieces/--bar/--out;
+# (c) parse-verdict gate: ADMIT BAR_MET tallied, ADMIT-WITH-NOTE wins over ADMIT
+# containment, BAR_NOT_MET wins over BAR_MET, bare-base door-path appended, floor on
+# every ask; (c2) tokenless answer -> UNPARSED named, never tallied, raw stored;
+# (c3) BOTH bar tokens + ADMIT-WITH-NOTE on one line -> longer tokens win, --bar
+# override rides the system prompt; (d) keep-first: second fire at the SAME store path
+# -> named KEEP-FIRST collision rc0, first copy bytes INTACT, no crash; (e) NON-JSON
+# body -> named head in the result, rc0, no traceback; (f) empty-choices JSON shell ->
+# named DOOR-SHELL (IndexError cure), rc0. Loud-named: leg defects record a NAMED FAIL.
+def _bar_audit_leg():
+    _saved_seat = os.environ.get("ORGANS_SEAT_URL")
+    _saved_model = os.environ.get("ORGANS_SEAT_MODEL")
+    try:
+        _ba_src = os.path.join(REPO, "scripts", "bar_audit.py")
+        _ba_f1 = os.path.join(HERE, "fixtures", "bar_piece_one.md")
+        _ba_f2 = os.path.join(HERE, "fixtures", "bar_piece_two.md")
+        _ba_fb = os.path.join(HERE, "fixtures", "bar_override.txt")
+        for _p in (_ba_src, _ba_f1, _ba_f2, _ba_fb):
+            if not os.path.exists(_p):
+                record("bar-audit-gates", False, "fixture absent: " + os.path.basename(_p))
+                return
+        _ba_scr = tempfile.mkdtemp(prefix="organs_ba_")
+        _ba_kit = os.path.join(_ba_scr, "kit"); os.makedirs(_ba_kit)
+        _ba = os.path.join(_ba_kit, "bar_audit.py")
+        shutil.copy(_ba_src, _ba)
+        # config pins BESIDE the rig: bare-base seat_url -> the door-path cure appends
+        json.dump({"seat_url": "http://127.0.0.1:9", "seat_model": "local-seat"},
+                  open(os.path.join(_ba_kit, "local.json"), "w", encoding="utf-8"))
+        _ba_n1 = len(open(_ba_f1, "rb").read())
+        _ba_n2 = len(open(_ba_f2, "rb").read())  # non-ASCII fixture: byte census != char count
+        _ba_pieces = "one=" + _ba_f1 + ",two=" + _ba_f2
+        _ba_env = {"ORGANS_SEAT_URL": "http://127.0.0.1:9", "ORGANS_SEAT_MODEL": "local-seat"}
+        _ba_maxtoks = []
+        def _ba_router(text):
+            def _r(p, req):
+                _ba_maxtoks.append(json.loads(req.data.decode("utf-8")).get("max_tokens"))
+                return {"choices": [{"message": {"content": text}}]}
+            return _r
+        def _ba_store(tree):
+            _cf = [k for k in tree if k.startswith("scripts/census/bar-audit-")]
+            assert len(_cf) == 1, f"store rows: {_cf}"
+            return json.loads(tree[_cf[0]])
+
+        # fire a: --dry -> rc0, COMPUTED byte counts, zero door calls, no census write
+        _ca, _oa, _ta, _ka, _ha = run_rig(_ba, lambda p, req: {},
+                                          argv=["audit", "--pieces", _ba_pieces, "--dry"], env=_ba_env)
+        _ca2, _oa2, _ta2, _ka2, _ha2 = run_rig(_ba, lambda p, req: {},
+                                               argv=["audit", "--pieces", _ba_pieces, "--bar", _ba_fb, "--dry"], env=_ba_env)
+        ok_a = (_ca == 0 and f"[dry] audit one bytes={_ba_n1}" in _oa
+                and f"[dry] audit two bytes={_ba_n2}" in _oa and "ZERO door calls" in _oa
+                and not _ka and not any(k.startswith("scripts/census/") for k in _ta)
+                and _ca2 == 0 and "bar-override=True" in _oa2 and not _ka2)
+
+        # fire b: arg-shape refusals -> rc2 BEFORE any door, each named
+        _ba_refusals = [
+            ([], "REFUSE: verb audit required"),
+            (["audit"], "REFUSE: audit needs --pieces"),
+            (["audit", "--pieces", "noequals"], "REFUSE: --pieces entry not name=PATH"),
+            (["audit", "--pieces", "=x"], "REFUSE: --pieces entry needs non-empty name"),
+            (["audit", "--pieces", "x="], "REFUSE: --pieces entry needs non-empty name"),
+            (["audit", "--pieces"], "REFUSE: --pieces without value"),
+            (["audit", "--pieces", _ba_pieces, "--bar"], "REFUSE: --bar without value"),
+            (["audit", "--pieces", _ba_pieces, "--out"], "REFUSE: --out without value"),
+        ]
+        ok_b = True
+        for _argv, _want in _ba_refusals:
+            _cb, _ob, _tb, _kb, _hb = run_rig(_ba, lambda p, req: {}, argv=_argv, env=_ba_env)
+            ok_b = ok_b and _cb == 2 and _want in _ob and not _kb
+
+        # fire c: parse-verdict gate -- mixed answers dispatched on the piece content
+        _ba_ans_ok = "VERDICT = ADMIT, BAR_MET" + "\n" + "the piece meets its stated bar in one concrete move."
+        _ba_ans_note = "VERDICT = ADMIT-WITH-NOTE, BAR_NOT_MET" + "\n" + "force present but the bar's action clause is missing."
+        def _ba_router_mixed(p, req):
+            _body = json.loads(req.data.decode("utf-8"))
+            _ba_maxtoks.append(_body.get("max_tokens"))
+            _piece = _body["messages"][-1]["content"]
+            _txt = _ba_ans_ok if "Synthetic scene one" in _piece else _ba_ans_note
+            return {"choices": [{"message": {"content": _txt}}]}
+        _cc, _oc, _tc, _kc, _hc = run_rig(_ba, _ba_router_mixed,
+                                          argv=["audit", "--pieces", _ba_pieces], env=_ba_env)
+        _ba_cstore = _ba_store(_tc)
+        ok_c = (_cc == 0 and "audit one -> ADMIT BAR_MET" in _oc
+                and "audit two -> ADMIT-WITH-NOTE BAR_NOT_MET" in _oc
+                and "SUMMARY pieces=2 parsed=2 unparsed=0 door-errors=0 admit=1 admit-with-note=1 hold=0 bar_met=1 bar_not_met=1" in _oc
+                and _ba_cstore["results"]["one"]["verdict"] == "ADMIT"
+                and _ba_cstore["results"]["one"]["bar"] == "BAR_MET"
+                and _ba_cstore["results"]["one"]["raw"] == _ba_ans_ok
+                and _ba_cstore["results"]["two"]["verdict"] == "ADMIT-WITH-NOTE"
+                and _ba_cstore["results"]["two"]["bar"] == "BAR_NOT_MET"
+                and _ba_cstore["seat"] == "http://127.0.0.1:9/v1/chat/completions"
+                and _kc == ["/v1/chat/completions"] * 2)
+
+        # fire c2: tokenless answer -> UNPARSED named, NEVER tallied, raw stored
+        _ba_ans_unp = "the piece rambles and never names a verdict."
+        _cc2, _oc2, _tc2, _kc2, _hc2 = run_rig(_ba, _ba_router(_ba_ans_unp),
+                                               argv=["audit", "--pieces", _ba_pieces], env=_ba_env)
+        _ba_c2store = _ba_store(_tc2)
+        ok_c2 = (_cc2 == 0 and "UNPARSED UNPARSED" in _oc2
+                 and "SUMMARY pieces=2 parsed=0 unparsed=2 door-errors=0 admit=0 admit-with-note=0 hold=0 bar_met=0 bar_not_met=0" in _oc2
+                 and _ba_c2store["results"]["one"]["raw"] == _ba_ans_unp
+                 and _ba_c2store["results"]["one"]["ok"] is True
+                 and _kc2 == ["/v1/chat/completions"] * 2)
+
+        # fire c3: BOTH bar tokens + ADMIT-WITH-NOTE on one line -> longer tokens win;
+        # --bar override rides the system prompt (containment order law, both directions)
+        _ba_bar_txt = open(_ba_fb, encoding="utf-8").read()
+        _ba_override_seen = []
+        def _ba_router_both(p, req):
+            _body = json.loads(req.data.decode("utf-8"))
+            _ba_maxtoks.append(_body.get("max_tokens"))
+            _ba_override_seen.append("EXPLICIT BAR OVERRIDE: " + _ba_bar_txt.strip() in _body["messages"][0]["content"])
+            return {"choices": [{"message": {"content": "VERDICT = ADMIT-WITH-NOTE, BAR_MET BAR_NOT_MET" + "\n" + "both tokens on one line: containment must pick the longer."}}]}
+        _cc3, _oc3, _tc3, _kc3, _hc3 = run_rig(_ba, _ba_router_both,
+                                               argv=["audit", "--pieces", "one=" + _ba_f1, "--bar", _ba_fb], env=_ba_env)
+        _ba_c3store = _ba_store(_tc3)
+        ok_c3 = (_cc3 == 0 and "audit one -> ADMIT-WITH-NOTE BAR_NOT_MET" in _oc3
+                 and "SUMMARY pieces=1 parsed=1 unparsed=0 door-errors=0 admit=0 admit-with-note=1 hold=0 bar_met=0 bar_not_met=1" in _oc3
+                 and _ba_c3store["results"]["one"]["bar"] == "BAR_NOT_MET"
+                 and _ba_override_seen == [True] and _kc3 == ["/v1/chat/completions"])
+
+        # fire d: keep-first -- fire live, then fire AGAIN at the SAME store path:
+        # O_EXCL collision must surface NAMED rc0, first copy bytes intact, no crash
+        _cd1, _od1, _td1, _kd1, _hd1 = run_rig(_ba, _ba_router(_ba_ans_ok),
+                                               argv=["audit", "--pieces", _ba_pieces], env=_ba_env)
+        _ba_storelines = [l for l in _od1.splitlines() if l.startswith("store (keep-first):")]
+        assert len(_ba_storelines) == 1, f"store lines: {_ba_storelines}"
+        _ba_path = _ba_storelines[0].split("store (keep-first):", 1)[1].strip()
+        _ba_first = open(_ba_path, "rb").read()
+        _cd2, _od2, _td2, _kd2, _hd2 = run_rig(_ba, _ba_router(_ba_ans_ok),
+                                               argv=["audit", "--pieces", _ba_pieces, "--out", _ba_path], env=_ba_env)
+        ok_d = (_cd1 == 0 and _cd2 == 0 and "KEEP-FIRST collision" in _od2
+                and "first copy intact" in _od2
+                and open(_ba_path, "rb").read() == _ba_first
+                and "HARNESS-EXC" not in _od2 and "Traceback" not in _od2
+                and _kd1 == ["/v1/chat/completions"] * 2 and _kd2 == ["/v1/chat/completions"] * 2)
+
+        # fire e: NON-JSON body -> named head in the result, rc0 run, no traceback
+        def _ba_nonjson(p, req):
+            _ba_maxtoks.append(json.loads(req.data.decode("utf-8")).get("max_tokens"))
+            return b"<html>rate wall -- not json</html>"
+        _ce, _oe, _te, _ke, _he = run_rig(_ba, _ba_nonjson,
+                                          argv=["audit", "--pieces", _ba_pieces], env=_ba_env)
+        _ba_estore = _ba_store(_te)
+        ok_e = (_ce == 0 and "NON-JSON head:" in _oe and "door-errors=2" in _oe
+                and _ba_estore["results"]["one"]["ok"] is False
+                and "NON-JSON head:" in _ba_estore["results"]["one"].get("err", "")
+                and "KeyError" not in _oe and "Traceback" not in _oe and "HARNESS-EXC" not in _oe
+                and _ke == ["/v1/chat/completions"] * 2)
+
+        # fire f: empty-choices JSON shell -> named DOOR-SHELL (IndexError cure), rc0
+        def _ba_shell(p, req):
+            _ba_maxtoks.append(json.loads(req.data.decode("utf-8")).get("max_tokens"))
+            return {"choices": []}
+        _cf, _of, _tf, _kf, _hf = run_rig(_ba, _ba_shell,
+                                          argv=["audit", "--pieces", "one=" + _ba_f1], env=_ba_env)
+        _ba_fstore = _ba_store(_tf)
+        ok_f = (_cf == 0 and "DOOR-SHELL" in _of
+                and "DOOR-SHELL" in _ba_fstore["results"]["one"].get("err", "")
+                and "IndexError" not in _of and "Traceback" not in _of and "HARNESS-EXC" not in _of
+                and _kf == ["/v1/chat/completions"])
+
+        _floor_ok = len(_ba_maxtoks) == 12 and all(t >= 131072 for t in _ba_maxtoks)
+        record("bar-audit-gates", ok_a and ok_b and ok_c and ok_c2 and ok_c3 and ok_d and ok_e and ok_f and _floor_ok,
+               f"dry rc{_ca} doors={len(_ka)} refusals={len(_ba_refusals)} ok_b={ok_b} parse rc{_cc} "
+               f"unparsed rc{_cc2} bothtokens rc{_cc3} keepfirst rc{_cd2} intact={open(_ba_path, 'rb').read() == _ba_first} "
+               f"nonjson rc{_ce} shell rc{_cf} floor={_floor_ok}")
+    except Exception as e:
+        record("bar-audit-gates", False, f"LEG-EXC {type(e).__name__}: {e}")
+    finally:
+        if _saved_seat is None: os.environ.pop("ORGANS_SEAT_URL", None)
+        else: os.environ["ORGANS_SEAT_URL"] = _saved_seat
+        if _saved_model is None: os.environ.pop("ORGANS_SEAT_MODEL", None)
+        else: os.environ["ORGANS_SEAT_MODEL"] = _saved_model
+_bar_audit_leg()
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
