@@ -19,7 +19,8 @@ set  ORGANS_VENUE_URL = venue base URL for vw_unified (else config key 'venue_ur
 set  ORGANS_MNEMOS     = mnemos sqlite path (dream_beat; else config key 'mnemos' in ~/organs.json)
 set  ORGANS_DREAM_SH  = the dream-hour script path (dream_beat; else config key 'dream_sh'; a placeholder
                        default refuses with a named exit 2, per the F-13 audit cure)
-set  ORGANS_SEAT_URL  = engine seat base (skin/* and pipes probes hit <base>/api/health; live suite leg; GET-only)
+set  ORGANS_SEAT_URL  = engine seat base (skin/* and pipes probes hit <base>/api/health; mirror_audit/seat_score
+                       chat-completions door — bare base auto-appends /v1/chat/completions; live suite leg GET-only)
 set  ORGANS_GGUF_FILE = default .gguf for molt/gguf_hist.py (argv also works; absent = named exit 2)
 set  ORGANS_RIGS      = run_rig registry file (SHOP config; else HOME/scripts/rigs.json; seed example in run_rig.py header)
 set  ORGANS_HONCHO_URL / ORGANS_EMBED_URL = door bases for mesh_leg/after_restart probes (defaults 127.0.0.1:8000 / :8081)
@@ -28,7 +29,10 @@ set  ORGANS_HONCHO_URL / ORGANS_EMBED_URL = door bases for mesh_leg/after_restar
 Every `ORGANS_*` value ALSO rides a config file, resolved in order
 `env -> <rig-dir>/local.json -> ~/organs.json` — so bells fire green with an empty environment.
 Config keys (same JSON, any subset): `home`, `secrets`, `shop_dir`, `leg_dir`, `mnemos`,
-`dream_sh`, `seat_url`, `seat_model` (mirror_audit seat model name; portable default `local-seat`), `handle`, `ledger`, `jobs`, `bell_firings`, `tz_offset`,
+`dream_sh`, `seat_url` (chat-completions door for mirror_audit/seat_score; a bare base gets
+/v1/chat/completions appended), `seat_model` (mirror_audit/seat_score seat model name; portable
+default `local-seat`), `score_seats` (seat_score extra seats: `[{name, url, model}, ...]` — the
+local seat always rides first; none required), `handle`, `ledger`, `jobs`, `bell_firings`, `tz_offset`,
 `row_prefix` (cadence counter leg — NO shop identity in the portable default: unset prints
 `COUNTER LEG INERT` advisory and skips; set it to your ledger's row token, e.g. `"C5"`),
 `pipes_extra` (pipes_beat tailnet entries: `[[label, url, expected_status], ...]`),
@@ -70,6 +74,7 @@ the repo ships zero estate paths, ports, names, or row prefixes.
 | `scripts/run_rig.py` | registry dispatcher (_run_<rig><n> wrapper family): registry is SHOP config (`ORGANS_RIGS` / HOME/scripts/rigs.json; seed example in the header, never shipped), plan by default, `--fire` executes via runlib | `NO-REGISTRY` (exit 4); `REFUSE: rig <name> not in registry` (exit 5, known names printed) |
 | `scripts/vw_unified.py` | venue-watch runner (_vw_*_walk/_ship, _vwatch_stamp/_fetch, _stamp_vw, _ship_vwatch family, 53 one-offs distilled): walk = plain-GET line census, 404 ranges handled by design (namespace separation: 1f3d9 line ids vs 1f916 comment ids); ship = `--dry` gates locally (ASCII, <=26 chars, <=240 enc8 bytes, ZERO door calls), venue write only behind `--fire` with byte+char asserts BEFORE POST, standing==place, NO-LID guard (never GET /api/line/None), dec8 readback roundtrip; goto = DESCEND chains + CLIMB edges, /api/place parent fallback, retry cap 4, 12-move cap; runlib lazy at ship/goto fire sites only (walk runs without it); secret lazy at fire site, Authorization header only | `REFUSE: ship is a venue write -- --fire required` (exit 4); dry gate-fail names the dead rows (exit 3); `REFUSE: RuntimeError: standing() needs runlib` (exit 5, never a traceback); secret refusals exit 2 |
 | `scripts/mirror_audit.py` | cold seat audit runner (_mirror_audit_batch* family, 317 one-offs distilled): GP719 bar auto-discover (`**Bar:**` in piece), GP739 parse gate (verdict without a reason sentence = UNPARSED, reroll cap 2, never stores a groundless verdict), GP740 record-only header = ACT-ONLY; max_tokens floor 131072 asserted in ask(); `--dry` plans with ZERO seat calls; model name via `seat_model` config (deployed local.json pins the real seat model) | `REFUSE: no files` (exit 2); `NO-REGISTRY` (exit 4); cap-exhausted rows booked `unparsed_final: true`, unparsed count on the STORE line |
+| `scripts/seat_score.py` | multi-seat binary scoring runner (_pile_score*/_score_batch* family, 78 one-offs distilled): parse3 gate IN CODE (cond1/cond2/cond3 all present as digits, else PENDING — raw always stored, PENDING rows never enter triples, firing #75), keep-first O_EXCL window-stamped store (GP534: never overwrite the first copy), max_tokens floor 131072 asserted in ask(), bare-base `seat_url` gets /v1/chat/completions appended, non-JSON door bodies named (CATCHES 302); `score --pieces name=PATH,...` with `--ask/--out/--dry`; `--dry` byte census with ZERO seat calls; extra seats via `score_seats` config | `REFUSE: verb score required` (exit 2); malformed `--pieces`/missing template REFUSE rc2 before any door; PENDING rows booked `complete: false` with raw; O_EXCL collision names `FileExistsError`, first copy intact; `NON-JSON body head=` named in the result, never a traceback |
 
 ## Tests
 

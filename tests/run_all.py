@@ -1092,6 +1092,7 @@ MANIFEST_PY = [
     'scripts/runlib.py',
     'scripts/scan_organ.py',
     'scripts/screen.py',
+    'scripts/seat_score.py',
     'scripts/ship_queue_20261111.py',
     'scripts/skin/sit_sampler.py',
     'scripts/skin/skin_sampler.py',
@@ -1444,6 +1445,127 @@ def _vw_unified_leg():
         if _saved_sec is None: os.environ.pop("ORGANS_SECRETS", None)
         else: os.environ["ORGANS_SECRETS"] = _saved_sec
 _vw_unified_leg()
+
+# ---------- seat-score-gates (Tier-2 seat_score organ: the 78-copy scoring family
+# (_pile_score* 54 + _score_batch* 24) distilled; parse3 PENDING gate, keep-first O_EXCL,
+# maxtok floor 131072, door-path + non-JSON cures IN CODE). Fires through run_rig on a
+# SCRATCH COPY with local.json BESIDE it (config-chain locality datum: the host's
+# ~/organs.json must never leak into the sandbox; the pins live beside the rig). Six fires:
+# (a) --dry two synthetic pieces -> rc0 COMPUTED byte counts, ZERO door calls;
+# (b) verbless -> REFUSE rc2; (c) mocked seat valid 3-cond answer -> triple COMPLETE +
+# store row (triple shape asserted), bare-base door-path appended, maxtok floor on every
+# ask; (d) TWO-cond answer -> PENDING, complete False, raw stored; (e) keep-first: frozen
+# window stamp + pre-existing store path + mocked success -> O_EXCL collision named
+# FileExistsError, first copy bytes INTACT, no harness crash; (f) NON-JSON body -> named
+# NON-JSON head in the result, rc0, no traceback. Loud-named: leg defects record a NAMED FAIL.
+def _seat_score_leg():
+    _saved_seat = os.environ.get("ORGANS_SEAT_URL")
+    _saved_strftime = time.strftime
+    try:
+        _ss_src = os.path.join(REPO, "scripts", "seat_score.py")
+        _ss_scr = tempfile.mkdtemp(prefix="organs_ss_")
+        _ss_kit = os.path.join(_ss_scr, "kit"); os.makedirs(_ss_kit)
+        _ss = os.path.join(_ss_kit, "seat_score.py")
+        shutil.copy(_ss_src, _ss)
+        # config pins BESIDE the rig (datum 1): bare-base seat_url -> the door-path cure appends
+        json.dump({"seat_url": "http://127.0.0.1:9", "seat_model": "local-seat"},
+                  open(os.path.join(_ss_kit, "local.json"), "w", encoding="utf-8"))
+        _ss_p1 = os.path.join(_ss_scr, "piece-one.md")
+        _ss_p2 = os.path.join(_ss_scr, "piece-two.md")
+        _ss_b1 = "synthetic concrete scene one\n"
+        _ss_b2 = "caf" + chr(233) + " synthetic scene two\n"  # non-ASCII: byte census != char count
+        open(_ss_p1, "w", encoding="utf-8").write(_ss_b1)
+        open(_ss_p2, "w", encoding="utf-8").write(_ss_b2)
+        _ss_n1, _ss_n2 = len(_ss_b1.encode("utf-8")), len(_ss_b2.encode("utf-8"))
+        _ss_pieces = "one=" + _ss_p1 + ",two=" + _ss_p2
+        _ss_env = {"ORGANS_SEAT_URL": "http://127.0.0.1:9"}
+        _ss_maxtoks = []
+        def _ss_router(text):
+            def _r(p, req):
+                _ss_maxtoks.append(json.loads(req.data.decode("utf-8")).get("max_tokens"))
+                return {"choices": [{"message": {"content": text}}]}
+            return _r
+        def _ss_rows(tree, prefix):
+            _cf = [k for k in tree if k.startswith(prefix)]
+            assert len(_cf) == 1, f"store rows {prefix}: {_cf}"
+            return json.loads(tree[_cf[0]])
+
+        # fire a: --dry -> rc0, COMPUTED byte counts, zero door calls, no census write
+        _ca, _oa, _ta, _ka, _ha = run_rig(_ss, lambda p, req: {},
+                                          argv=["score", "--pieces", _ss_pieces, "--dry"], env=_ss_env)
+        ok_a = (_ca == 0 and f"one DRY bytes= {_ss_n1}" in _oa and f"two DRY bytes= {_ss_n2}" in _oa
+                and "DRY-PLAN pieces= 2 seats= 1" in _oa and not _ka
+                and not any(k.startswith("scripts/census/") for k in _ta))
+
+        # fire b: verbless -> REFUSE rc2, zero doors
+        _cb, _ob, _tb, _kb, _hb = run_rig(_ss, lambda p, req: {}, argv=[], env=_ss_env)
+        ok_b = (_cb == 2 and "REFUSE: verb score required" in _ob and not _kb)
+
+        # fire c: valid 3-cond answer -> COMPLETE triples + store rows + door-path + floor
+        _ss_ans3 = "cond1=1\ncond2=0\ncond3=1"
+        _cc, _oc, _tc, _kc, _hc = run_rig(_ss, _ss_router(_ss_ans3),
+                                          argv=["score", "--pieces", _ss_pieces], env=_ss_env)
+        _ss_r1 = _ss_rows(_tc, "scripts/census/score-one-local-")
+        _ss_r2 = _ss_rows(_tc, "scripts/census/score-two-local-")
+        _ss_run = json.loads(_tc.get("scripts/census/seat-score-run.json", "null"))
+        ok_c = (_cc == 0 and "COMPLETE" in _oc and "pending= 0" in _oc
+                and _ss_r1["triple"] == [1, 0, 1] and _ss_r1["complete"] is True
+                and _ss_r1["raw"] == _ss_ans3 and _ss_r1["measured_bytes"] == _ss_n1
+                and _ss_r1["piece"] == "one" and _ss_r1["seat"] == "local"
+                and _ss_r2["triple"] == [1, 0, 1] and _ss_r2["measured_bytes"] == _ss_n2
+                and _ss_run == {"one": {"local": {"triple": [1, 0, 1], "complete": True}},
+                                "two": {"local": {"triple": [1, 0, 1], "complete": True}}}
+                and _kc == ["/v1/chat/completions", "/v1/chat/completions"]
+                and len(_ss_maxtoks) == 2 and all(t >= 131072 for t in _ss_maxtoks))
+
+        # fire d: TWO-cond answer -> PENDING, complete False, raw stored (firing #75)
+        _ss_ans2 = "cond1=1\ncond2=0"
+        _cd, _od, _td, _kd, _hd = run_rig(_ss, _ss_router(_ss_ans2),
+                                          argv=["score", "--pieces", _ss_pieces], env=_ss_env)
+        _ss_d1 = _ss_rows(_td, "scripts/census/score-one-local-")
+        ok_d = (_cd == 0 and "PENDING" in _od and "pending= 2" in _od
+                and _ss_d1["triple"] is None and _ss_d1["complete"] is False
+                and _ss_d1["raw"] == _ss_ans2
+                and _kd == ["/v1/chat/completions"] * 2)
+
+        # fire e: keep-first -- freeze the window stamp, pre-seed the store path, mocked success:
+        # O_EXCL collision must surface NAMED, first copy bytes intact, harness never crashes
+        _ss_tag = "20261114T000000"
+        time.strftime = lambda fmt, *a: _ss_tag
+        _ss_first = '{"first": "copy sentinel"}\n'
+        _ss_seed = "scripts/census/score-one-local-" + _ss_tag + ".json"
+        _ce, _oe, _te, _ke, _he = run_rig(_ss, _ss_router(_ss_ans3), files={_ss_seed: _ss_first},
+                                          argv=["score", "--pieces", _ss_pieces], env=_ss_env)
+        _ss_erun = json.loads(_te.get("scripts/census/seat-score-run.json", "null"))
+        ok_e = (_ce == 0 and "ERR FileExistsError" in _oe
+                and "FileExistsError" in _ss_erun["one"]["local"].get("error", "")
+                and _te.get(_ss_seed) == _ss_first  # first copy INTACT, never overwritten
+                and _ss_erun["two"]["local"]["complete"] is True
+                and "HARNESS-EXC" not in _oe and "Traceback" not in _oe)
+
+        # fire f: NON-JSON body -> named NON-JSON head in the result, rc0 run, no traceback
+        def _ss_nonjson(p, req):
+            _ss_maxtoks.append(json.loads(req.data.decode("utf-8")).get("max_tokens"))
+            return b"<html>rate wall -- not json</html>"
+        _cf, _of, _tf, _kf, _hf = run_rig(_ss, _ss_nonjson,
+                                          argv=["score", "--pieces", _ss_pieces], env=_ss_env)
+        _ss_frun = json.loads(_tf.get("scripts/census/seat-score-run.json", "null"))
+        ok_f = (_cf == 0 and "NON-JSON body head=" in _of and "missing/errors= 2" in _of
+                and "NON-JSON body head=" in _ss_frun["one"]["local"].get("error", "")
+                and "KeyError" not in _of and "Traceback" not in _of and "HARNESS-EXC" not in _of
+                and _kf == ["/v1/chat/completions"] * 2)
+
+        _floor_ok = len(_ss_maxtoks) == 8 and all(t >= 131072 for t in _ss_maxtoks)
+        record("seat-score-gates", ok_a and ok_b and ok_c and ok_d and ok_e and ok_f and _floor_ok,
+               f"dry rc{_ca} doors={len(_ka)} verbless rc{_cb} complete rc{_cc} pending rc{_cd} "
+               f"keepfirst rc{_ce} intact={_te.get(_ss_seed) == _ss_first} nonjson rc{_cf} floor={_floor_ok}")
+    except Exception as e:
+        record("seat-score-gates", False, f"LEG-EXC {type(e).__name__}: {e}")
+    finally:
+        time.strftime = _saved_strftime
+        if _saved_seat is None: os.environ.pop("ORGANS_SEAT_URL", None)
+        else: os.environ["ORGANS_SEAT_URL"] = _saved_seat
+_seat_score_leg()
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
