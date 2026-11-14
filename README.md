@@ -9,6 +9,52 @@ Born in one shop (2026-10..11), packaged 2026-11-12. No venue data, no ledgers,
 no secrets ride here — every path is an env var, every secret is a file you point
 at. Read LAWS.md first; the laws are the product, the rigs are their proofs.
 
+## Assumptions (what this kit presumes about your machine and shop)
+
+**Tested floor — say it plain before anything else:** every rig and the full suite are
+proven on **Windows 10, Python 3.11–3.14, git-bash/MSYS shell, Hermes Agent (Nous
+Research) as the scheduler/bell host, and a local OpenAI-compatible seat (our era: a
+Strata desktop host)**. Nothing here has been *tested* on Linux, macOS, Docker, or other
+agent harnesses. The code is stdlib/pathlib-clean and the config chain has no hardcoded
+drive letters, so portability is plausible — **treat it as a hypothesis with a booked
+self-test, not a claim**: run the hermetic suite on your machine first; its green print
+is *your* proof.
+
+Assumptions baked in: (1) one agent + one human keeper, agent runs rigs on a scheduler
+(any CLI scheduler — Hermes cron is ours, not required); (2) one canonical shop tree
+(`ORGANS_HOME`), append-only zero-delete ledgers with reserve-asserted numbering;
+(3) a seat that speaks OpenAI-compatible chat-completions over HTTP; (4) venue doors are
+**configured, never assumed** — every rig without a configured door refuses with a named
+exit, there are no silent default doors into someone else's venue; (5) Python ≥ 3.11.
+
+## Core vs optional (adopt the core, swap the adapters)
+
+- **Core — venue-free, adopt as-is:** `mint_row` + `counter_head` (the append-only
+  ledger chain), `runlib` + `run_rig` (rig harness and test seams), `twin_sync`,
+  the suite harness (`tests/run_all.py`), `after_restart`, `cadence_audit`, skin/body
+  window probes.
+- **Seat family — portable to any OpenAI-compatible seat:** `seat_score`, `bar_audit`,
+  `cage_probe`, `mirror_audit` (point `ORGANS_SEAT_URL` at your engine).
+- **Venue adapters — written for OUR venues; your venues replace them:** `mesh_leg`,
+  `inbox_leg`, `inbox_gate`, `vw_unified`. Their door grammars are documented in each
+  rig's header; treat them as templates, expect to rewrite the HTTP layer.
+- **Kit-optional:** `tts_clip` (needs a local TTS kit), `hf_mirror` (needs a Hugging
+  Face account and `huggingface_hub`), `dream_beat` (needs a Mnemos store), `screen`
+  (content screens for publishing).
+
+## Adoption path on a similar-but-not-identical machine
+
+1. Run the suite hermetic: all door calls ride injectable seams, zero network, zero
+   secrets — `python tests/run_all.py`. Green here is your machine's proof.
+2. Run one core rig with `--dry` and read its named refusals; they teach the config
+   chain (`env -> <rig-dir>/local.json -> ~/organs.json`).
+3. Wire YOUR ledger (row grammar is documented), then YOUR scheduler (any cron;
+   bells are plain CLI invocations with a workdir), then YOUR venue adapter.
+4. Generalization is deliberately unfinished where venues are involved: the door
+   grammars of our venues are in adapter headers as *field data for you to compare
+   against yours*, not as promises. Open issues/PRs on divergences — feedback from
+   non-Windows machines is the booked self-test for the portability hypothesis.
+
 ## Setup
 
 ```
