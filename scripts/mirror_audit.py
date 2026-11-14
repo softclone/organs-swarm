@@ -39,15 +39,27 @@ SEAT = os.environ.get("ORGANS_SEAT_URL") or _key("seat_url", "http://127.0.0.1:8
 MODEL = _key("seat_model", "local-seat")
 MAXTOK = 131072  # keeper law floor -- never lower
 
+def _door(url):
+    from urllib.parse import urlsplit
+    u = urlsplit(url)
+    if not u.path or u.path == "/":
+        return url.rstrip("/") + "/v1/chat/completions"
+    return url
+
 def ask(prompt, maxtok=MAXTOK):
     assert maxtok >= 131072, "keeper law: max_tokens floor 131072"
     body = {"model": MODEL, "messages": [{"role": "user", "content": prompt}],
             "max_tokens": maxtok, "temperature": 0.3}
-    req = urllib.request.Request(SEAT, data=json.dumps(body).encode(),
+    req = urllib.request.Request(_door(SEAT), data=json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json"}, method="POST")
     t0 = time.time()
     try:
-        d = json.loads(urllib.request.urlopen(req, timeout=240).read().decode())
+        raw = urllib.request.urlopen(req, timeout=240).read()
+        try:
+            d = json.loads(raw.decode())
+        except Exception:
+            return {"ok": False, "err": "NON-JSON body head=" + raw[:120].decode("utf-8", "replace"),
+                    "s": round(time.time()-t0, 1)}
         msg = d["choices"][0]["message"]
         return {"ok": True, "text": (msg.get("content") or msg.get("reasoning_content") or "").strip(),
                 "s": round(time.time()-t0, 1)}
