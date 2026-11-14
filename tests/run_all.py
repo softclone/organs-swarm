@@ -1102,6 +1102,7 @@ MANIFEST_PY = [
     'scripts/surface_monitor.py',
     'scripts/sweep_organ_v2.py',
     'scripts/truncation_sweep.py',
+    'scripts/tts_clip.py',
     'scripts/twin_fwd.py',
     'scripts/twin_proxy_8082.py',
     'scripts/venue/preflight_1f916.py',
@@ -1750,6 +1751,153 @@ def _bar_audit_leg():
         if _saved_model is None: os.environ.pop("ORGANS_SEAT_MODEL", None)
         else: os.environ["ORGANS_SEAT_MODEL"] = _saved_model
 _bar_audit_leg()
+
+# ---------- tts-clip-gates (Tier-2 tts_clip organ: the 21-copy _clip* local-voice family
+# distilled; CPU-only render, magic-byte player dispatch, silent-wav gate IN CODE).
+# NO network, NO audio, NO real TTS binary render in-suite: render fires are --dry or a
+# SIMULATED exe (subprocess.run mocked in-process; placeholder kit files satisfy the
+# existence gates; the mock writes the scenario wav bytes and returns the scenario rc --
+# fire class named mock-exe in the record note; the kit-absent refusal fires separately
+# in (b) against a HOME without tts/). play fires ONLY --dry: zero player invocations,
+# zero PowerShell, zero writes. Fixtures live in tests/fixtures/ -- a missing fixture
+# records a NAMED FAIL, never a harness crash. Fires: (a) dry render -> rc0, chars
+# counted in-call (non-ASCII fixture: chars != bytes), ZERO exe calls, no wav written;
+# (b) refusals rc2 before any exe: verbless, missing --out, absent text file, empty text,
+# kit exe absent, model absent, play missing/absent --file, unknown verb; (c) magic-byte
+# dispatch via play --dry: RIFF/WAVE -> PCM route named, 0xFF 0xF3 / 0xFF 0xFB -> MP3
+# route named, garbage -> PLAY-NAMED rc3, 44-byte silent wav -> SILENT-FAIL rc3, all
+# with ZERO player calls and no .ps1 write; (d) silent-wav gate via the SIMULATED exe:
+# 44-byte wav -> SILENT-FAIL rc3, 1068-byte wav -> rendered rc0 measured bytes, rc0 with
+# no wav -> RENDER-NAMED rc3, exe rc1 -> RENDER-DEAD rc3; every simulated cmd asserts
+# --backend cpu, NO --speed, NO --text-file passthrough, --text carries the file text.
+# Loud-named: leg defects record a NAMED FAIL.
+def _tts_clip_leg():
+    _saved_run = subprocess.run
+    _saved_exe = os.environ.get("ORGANS_TTS_EXE")
+    _saved_model = os.environ.get("ORGANS_TTS_MODEL")
+    try:
+        _tc_src = os.path.join(REPO, "scripts", "tts_clip.py")
+        _tc_fix = os.path.join(HERE, "fixtures")
+        _tc_names = ("tts_clip_text.txt", "tts_clip_pcm.wav", "tts_clip_mp3_f3.wav",
+                     "tts_clip_mp3_fb.wav", "tts_clip_garbage.bin", "tts_clip_silent.wav")
+        for _p in [_tc_src] + [os.path.join(_tc_fix, n) for n in _tc_names]:
+            if not os.path.exists(_p):
+                record("tts-clip-gates", False, "fixture absent: " + os.path.basename(_p))
+                return
+        _tc_scr = tempfile.mkdtemp(prefix="organs_tc_")
+        _tc_kitdir = os.path.join(_tc_scr, "kit"); os.makedirs(_tc_kitdir)
+        _tc = os.path.join(_tc_kitdir, "tts_clip.py")
+        shutil.copy(_tc_src, _tc)
+        # config pin BESIDE the rig: tts_model pinned so the host's ~/organs.json never leaks
+        json.dump({"tts_model": "kokoro-82m-q8_0.gguf"},
+                  open(os.path.join(_tc_kitdir, "local.json"), "w", encoding="utf-8"))
+        _tc_textpath = os.path.join(_tc_fix, "tts_clip_text.txt")
+        _tc_text = open(_tc_textpath, encoding="utf-8").read().strip()
+        _tc_chars = len(_tc_text)  # computed in-call; non-ASCII fixture: chars != bytes
+        _tc_pcm = open(os.path.join(_tc_fix, "tts_clip_pcm.wav"), "rb").read()
+        _tc_silent = open(os.path.join(_tc_fix, "tts_clip_silent.wav"), "rb").read()
+        _tc_kitfiles = {"tts/audiocpp_cli.exe": "simulated kit exe (placeholder, never fired)",
+                        "tts/kokoro-82m-q8_0.gguf": "simulated model (placeholder)"}
+        _tc_exeonly = {"tts/audiocpp_cli.exe": "simulated kit exe (placeholder, never fired)"}
+        _tc_empty = os.path.join(_tc_scr, "empty.txt")
+        open(_tc_empty, "w", encoding="utf-8").write(chr(10) + " " + chr(10))
+        # SIMULATED exe: subprocess.run mocked in-process -- zero real processes, zero audio.
+        _tc_calls = []
+        _tc_sim = {"wav": None, "rc": 0}
+        def _tc_fake_run(cmd, *a, **kw):
+            _tc_calls.append(list(cmd))
+            if _tc_sim["wav"] is not None and "--out" in cmd:
+                open(cmd[cmd.index("--out") + 1], "wb").write(_tc_sim["wav"])
+            return subprocess.CompletedProcess(cmd, _tc_sim["rc"], stdout="", stderr="simulated kit")
+        subprocess.run = _tc_fake_run
+        def _tc_arg(cmd, flag):
+            return cmd[cmd.index(flag) + 1] if flag in cmd and cmd.index(flag) + 1 < len(cmd) else None
+
+        # fire a: --dry render -> rc0, COMPUTED char count, zero exe calls, no wav written
+        _tc_out_a = os.path.join(_tc_scr, "clip-dry.wav")
+        _ca, _oa, _ta, _ka, _ha = run_rig(_tc, lambda p, req: {}, files=_tc_kitfiles,
+            argv=["render", "--text-file", _tc_textpath, "--out", _tc_out_a, "--dry"])
+        ok_a = (_ca == 0 and "[dry] render chars=%d" % _tc_chars in _oa and "ZERO render calls" in _oa
+                and not _tc_calls and not os.path.exists(_tc_out_a) and not _ka)
+
+        # fire b: refusals -> rc2 BEFORE any exe, each named (kit-absent fire: HOME without tts/)
+        _tc_refusals = [
+            ([], "REFUSE: verb render|play required", _tc_kitfiles),
+            (["render", "--text-file", _tc_textpath], "REFUSE: render needs --out", _tc_kitfiles),
+            (["render", "--text-file", os.path.join(_tc_scr, "nope.txt"), "--out", _tc_out_a], "REFUSE: text file absent", _tc_kitfiles),
+            (["render", "--text-file", _tc_empty, "--out", _tc_out_a], "REFUSE: text file empty", _tc_kitfiles),
+            (["render", "--text-file", _tc_textpath, "--out", _tc_out_a], "REFUSE: kit exe absent", {}),
+            (["render", "--text-file", _tc_textpath, "--out", _tc_out_a], "REFUSE: model absent", _tc_exeonly),
+            (["play"], "REFUSE: play needs --file", _tc_kitfiles),
+            (["play", "--file", os.path.join(_tc_scr, "nope.wav")], "REFUSE: file absent", _tc_kitfiles),
+            (["bogus"], "REFUSE: unknown verb: bogus", _tc_kitfiles),
+        ]
+        ok_b = True
+        for _argv, _want, _files in _tc_refusals:
+            _n0 = len(_tc_calls)
+            _cb, _ob, _tb, _kb, _hb = run_rig(_tc, lambda p, req: {}, argv=_argv, files=_files)
+            ok_b = ok_b and _cb == 2 and _want in _ob and len(_tc_calls) == _n0 and not _kb
+
+        # fire c: magic-byte dispatch via play --dry -> route named, ZERO player calls, no .ps1
+        _tc_dispatch = [
+            ("tts_clip_pcm.wav", 0, "[dry] play route=PCM"),
+            ("tts_clip_mp3_f3.wav", 0, "[dry] play route=MP3"),
+            ("tts_clip_mp3_fb.wav", 0, "[dry] play route=MP3"),
+            ("tts_clip_garbage.bin", 3, "PLAY-NAMED"),
+            ("tts_clip_silent.wav", 3, "SILENT-FAIL"),
+        ]
+        ok_c = True
+        for _n, _rc, _want in _tc_dispatch:
+            _n0 = len(_tc_calls)
+            _fp = os.path.join(_tc_fix, _n)
+            _cc, _oc, _tc2, _kc, _hc = run_rig(_tc, lambda p, req: {}, argv=["play", "--file", _fp, "--dry"])
+            ok_c = ok_c and _cc == _rc and _want in _oc and len(_tc_calls) == _n0 and not _kc
+            if _rc == 0:
+                ok_c = ok_c and "bytes=%d" % os.path.getsize(_fp) in _oc and "ZERO player calls" in _oc
+            if _n == "tts_clip_silent.wav":
+                ok_c = ok_c and "%d bytes" % len(_tc_silent) in _oc
+        ok_c = ok_c and not os.path.exists(os.path.join(_tc_fix, "tts-clip-play.ps1"))
+
+        # fire d: silent-wav gate via the SIMULATED exe (mock-exe class: placeholder kit +
+        # mocked subprocess.run; NO real TTS binary, no audio). Fresh out path per scenario.
+        _tc_scen = [
+            ("silent", _tc_silent, 0, 3, "SILENT-FAIL"),
+            ("green", _tc_pcm, 0, 0, "rendered:"),
+            ("nowav", None, 0, 3, "RENDER-NAMED"),
+            ("dead", None, 1, 3, "RENDER-DEAD rc=1"),
+        ]
+        ok_d = True
+        for _tag, _wav, _src, _rc, _want in _tc_scen:
+            _tc_sim["wav"] = _wav; _tc_sim["rc"] = _src
+            _n0 = len(_tc_calls)
+            _tc_out_d = os.path.join(_tc_scr, "clip-" + _tag + ".wav")
+            _cd, _od, _td, _kd, _hd = run_rig(_tc, lambda p, req: {}, files=_tc_kitfiles,
+                argv=["render", "--text-file", _tc_textpath, "--out", _tc_out_d])
+            _cmd = _tc_calls[-1] if len(_tc_calls) == _n0 + 1 else []
+            ok_d = ok_d and _cd == _rc and _want in _od and len(_tc_calls) == _n0 + 1 and not _kd
+            ok_d = ok_d and _cmd[:1] == [os.path.join(_hd, "tts", "audiocpp_cli.exe")]
+            ok_d = ok_d and _tc_arg(_cmd, "--backend") == "cpu" and "--speed" not in _cmd and "--text-file" not in _cmd
+            ok_d = ok_d and _tc_arg(_cmd, "--text") == _tc_text and _tc_arg(_cmd, "--out") == _tc_out_d
+            ok_d = ok_d and _tc_arg(_cmd, "--model") == os.path.join(_hd, "tts", "kokoro-82m-q8_0.gguf")
+            ok_d = ok_d and _tc_arg(_cmd, "--voice-id") == "af_heart"
+            if _tag == "silent":
+                ok_d = ok_d and "%d bytes" % len(_tc_silent) in _od
+            if _tag == "green":
+                ok_d = ok_d and "bytes=%d" % len(_tc_pcm) in _od and os.path.getsize(_tc_out_d) == len(_tc_pcm)
+        _tc_noplayer = not any("powershell" in " ".join(c).lower() for c in _tc_calls)
+        ok_calls = len(_tc_calls) == 4 and _tc_noplayer
+        record("tts-clip-gates", ok_a and ok_b and ok_c and ok_d and ok_calls,
+               "dry rc%d chars=%d refusals=%d ok_b=%s dispatch ok_c=%s silent=mock-exe ok_d=%s exe-calls=%d player-calls=0"
+               % (_ca, _tc_chars, len(_tc_refusals), ok_b, ok_c, ok_d, len(_tc_calls)))
+    except Exception as e:
+        record("tts-clip-gates", False, "LEG-EXC %s: %s" % (type(e).__name__, e))
+    finally:
+        subprocess.run = _saved_run
+        if _saved_exe is None: os.environ.pop("ORGANS_TTS_EXE", None)
+        else: os.environ["ORGANS_TTS_EXE"] = _saved_exe
+        if _saved_model is None: os.environ.pop("ORGANS_TTS_MODEL", None)
+        else: os.environ["ORGANS_TTS_MODEL"] = _saved_model
+_tts_clip_leg()
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
