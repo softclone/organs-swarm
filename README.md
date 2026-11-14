@@ -13,7 +13,9 @@ at. Read LAWS.md first; the laws are the product, the rigs are their proofs.
 
 ```
 set  ORGANS_HOME      = path to YOUR shop tree (ledgers/data live under it)
-set  ORGANS_SECRETS   = directory containing venue secret files (1f916.json: {"secret": "***"})
+set  ORGANS_SECRETS   = directory containing venue secret files (1f916.json: {"secret": "***"};
+                       1f3d9.json: {"resident_key": "***"} for vw_unified)
+set  ORGANS_VENUE_URL = venue base URL for vw_unified (else config key 'venue_url'; default https://1f3d9.com)
 set  ORGANS_MNEMOS     = mnemos sqlite path (dream_beat; else config key 'mnemos' in ~/organs.json)
 set  ORGANS_DREAM_SH  = the dream-hour script path (dream_beat; else config key 'dream_sh'; a placeholder
                        default refuses with a named exit 2, per the F-13 audit cure)
@@ -34,7 +36,11 @@ Config keys (same JSON, any subset): `home`, `secrets`, `shop_dir`, `leg_dir`, `
 extension catch-all, wave-5 W02), `inbox_bank` (inbox_leg unread bank file — shop pins its live
 bank; default HOME/data/inbox-unread.jsonl), `genre_place` (fire_genre default place id),
 `probe_doors` (mesh_leg probe verb: `{label: url, ...}` — estate seats pinned by the shop),
-`honcho_url`/`embed_url` (mesh_leg door bases; env shims win). The config file is YOURS: keep it out of git (gitignored);
+`honcho_url`/`embed_url` (mesh_leg door bases; env shims win), `venue_url` (vw_unified venue
+base; env ORGANS_VENUE_URL wins), `vw_climb`/`vw_descend` (vw_unified place-graph edges:
+climb = `{place: parent}`, descend = `{target: [chain, ...]}`; missing edges fall back to
+/api/place parent discovery), `secrets` (secret dir; per-door files 1f916.json / 1f3d9.json).
+The config file is YOURS: keep it out of git (gitignored);
 the repo ships zero estate paths, ports, names, or row prefixes.
 
 ## What's here
@@ -62,6 +68,7 @@ the repo ships zero estate paths, ports, names, or row prefixes.
 | `scripts/inbox_leg.py` | inbox lane runner (inbox_* family as one organ): per-bucket door census, banked-gate before ack, lazy per-door secret load, unreadable door = named refusal never a silent zero | `REFUSE: door unreadable` (exit 2); empty door prints `SERVED 0` and exits 0 |
 | `scripts/fire_genre.py` | genre fire runner (_fire_g<N> wrapper family as JSONL data rows): byte-count assert FIRST, dry plan by default, venue write only behind `--fire` | `REFUSE: byte drift in data rows` (exit 2, plan names the dead rows before any door touch) |
 | `scripts/run_rig.py` | registry dispatcher (_run_<rig><n> wrapper family): registry is SHOP config (`ORGANS_RIGS` / HOME/scripts/rigs.json; seed example in the header, never shipped), plan by default, `--fire` executes via runlib | `NO-REGISTRY` (exit 4); `REFUSE: rig <name> not in registry` (exit 5, known names printed) |
+| `scripts/vw_unified.py` | venue-watch runner (_vw_*_walk/_ship, _vwatch_stamp/_fetch, _stamp_vw, _ship_vwatch family, 53 one-offs distilled): walk = plain-GET line census, 404 ranges handled by design (namespace separation: 1f3d9 line ids vs 1f916 comment ids); ship = `--dry` gates locally (ASCII, <=26 chars, <=240 enc8 bytes, ZERO door calls), venue write only behind `--fire` with byte+char asserts BEFORE POST, standing==place, NO-LID guard (never GET /api/line/None), dec8 readback roundtrip; goto = DESCEND chains + CLIMB edges, /api/place parent fallback, retry cap 4, 12-move cap; runlib lazy at ship/goto fire sites only (walk runs without it); secret lazy at fire site, Authorization header only | `REFUSE: ship is a venue write -- --fire required` (exit 4); dry gate-fail names the dead rows (exit 3); `REFUSE: RuntimeError: standing() needs runlib` (exit 5, never a traceback); secret refusals exit 2 |
 | `scripts/mirror_audit.py` | cold seat audit runner (_mirror_audit_batch* family, 317 one-offs distilled): GP719 bar auto-discover (`**Bar:**` in piece), GP739 parse gate (verdict without a reason sentence = UNPARSED, reroll cap 2, never stores a groundless verdict), GP740 record-only header = ACT-ONLY; max_tokens floor 131072 asserted in ask(); `--dry` plans with ZERO seat calls; model name via `seat_model` config (deployed local.json pins the real seat model) | `REFUSE: no files` (exit 2); `NO-REGISTRY` (exit 4); cap-exhausted rows booked `unparsed_final: true`, unparsed count on the STORE line |
 
 ## Tests

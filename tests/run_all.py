@@ -1105,6 +1105,7 @@ MANIFEST_PY = [
     'scripts/venue/preflight_1f916.py',
     'scripts/venue/rid_line.py',
     'scripts/venue/ship_post_20261111.py',
+    'scripts/vw_unified.py',
     'tests/run_all.py',
 ]
 _found_py = sorted(os.path.relpath(os.path.join(r, f), REPO).replace(os.sep, "/")
@@ -1322,6 +1323,127 @@ def _mirror_audit_leg():
         if _saved_seat is None: os.environ.pop("ORGANS_SEAT_URL", None)
         else: os.environ["ORGANS_SEAT_URL"] = _saved_seat
 _mirror_audit_leg()
+
+# ---------- vw-unified-gates (Tier-1 vw_unified organ: the 53-copy venue-watch one-off
+# family distilled; walk/ship/goto with byte+char+NO-LID+roundtrip gates IN CODE).
+# Fires at the door through run_rig: dry gate-fail rc3 (named per-row failures), dry
+# clean rc0 ZERO door calls, live-shape without --fire REFUSE rc4, verbless rc2,
+# mocked 3-id walk with the middle id serving HTTP 404 (rows=2, 404 printed, rc0 --
+# walk handles 404 ranges by design: 1f3d9 line ids vs 1f916 comment ids namespaces),
+# missing secret file REFUSE rc2 (int exit, not SystemExit-str's silent 1). runlib is
+# mocked at the IMPORT BOUNDARY: absent -> ship --fire must die NAMED (standing()
+# needs runlib) rc5, never a traceback; stubbed -> full live ship proves enc8 POST at
+# place, standing==place (no move), NO-LID guard (never GET /api/line/None) and dec8
+# readback roundtrip banked in receipts. Loud-named: leg defects record a NAMED FAIL.
+def _vw_unified_leg():
+    _saved_sec = os.environ.get("ORGANS_SECRETS")
+    _had_runlib = "runlib" in sys.modules
+    _saved_runlib = sys.modules.get("runlib")
+    try:
+        _vw = os.path.join(REPO, "scripts", "vw_unified.py")
+        _vw_scr = tempfile.mkdtemp(prefix="organs_vw_")
+        _vw_sec = os.path.join(_vw_scr, "sec"); os.makedirs(_vw_sec)
+        json.dump({"resident_key": "test-venue-key"}, open(os.path.join(_vw_sec, "1f3d9.json"), "w"))
+        _vw_env = {"ORGANS_SECRETS": _vw_sec}
+        _vw_empty_sec = os.path.join(_vw_scr, "empty_sec"); os.makedirs(_vw_empty_sec)
+
+        def _vw_plan(rows, name):
+            _p = os.path.join(_vw_scr, name)
+            json.dump(rows, open(_p, "w", encoding="utf-8"))
+            return _p
+
+        def _vw_enc8(s): return " ".join(format(ord(c), "08b") for c in s)
+
+        # fire a: dry plan -- over-limit + non-ASCII + no-place rows -> rc3, named gates, zero doors
+        _vw_bad = _vw_plan([{"place": 7, "text": "x" * 30},
+                            {"place": 7, "text": "caf" + chr(233)},
+                            {"text": "ok"}], "plan-bad.json")
+        _ca, _oa, _ta, _ka, _ha = run_rig(_vw, lambda p, req: {}, argv=["ship", "--plan", _vw_bad, "--dry"], env=_vw_env)
+        ok_a = (_ca == 3 and "chars 30>26" in _oa and "bytes 269>240" in _oa
+                and "non-ASCII" in _oa and "no place" in _oa and not _ka)
+
+        # fire b: dry plan all-clean -> rc0, zero door calls, no census write
+        _vw_good = _vw_plan([{"place": 7, "text": "hello venue"}], "plan-good.json")
+        _cb, _ob, _tb, _kb, _hb = run_rig(_vw, lambda p, req: {}, argv=["ship", "--plan", _vw_good, "--dry"], env=_vw_env)
+        ok_b = (_cb == 0 and "gate-failures= 0" in _ob and not _kb
+                and not any("census" in k for k in _tb))
+
+        # fire c: live-shape plan WITHOUT --fire -> REFUSE rc4, zero doors
+        _cc, _oc, _tc, _kc, _hc = run_rig(_vw, lambda p, req: {}, argv=["ship", "--plan", _vw_good], env=_vw_env)
+        ok_c = (_cc == 4 and "REFUSE" in _oc and "--fire" in _oc and not _kc)
+
+        # fire d: verbless -> REFUSE rc2
+        _cd, _od, _td, _kd, _hd = run_rig(_vw, lambda p, req: {}, argv=[], env=_vw_env)
+        ok_d = (_cd == 2 and "REFUSE" in _od and not _kd)
+
+        # fire e: mocked walk 11-13, middle id serves HTTP 404 -> rows=2, 404 printed, rc0
+        _vw_auths = []
+        def _vw_walk_router(p, req):
+            _vw_auths.append(req.get_header("Authorization"))
+            _lid = int(p.rsplit("/", 1)[1])
+            if _lid == 12:
+                raise urllib.error.HTTPError(req.full_url, 404, "Not Found", None, None)
+            _txt = {11: "row eleven", 13: "row thirteen"}[_lid]
+            return {"line": {"id": _lid, "place_id": _lid * 10, "author_name": "synthetic-author",
+                             "created_at": "2026-11-14T00:00:00Z", "body": _vw_enc8(_txt)}}
+        _ce, _oe, _te, _ke, _he = run_rig(_vw, _vw_walk_router, argv=["walk", "--range", "11-13"], env=_vw_env)
+        _vw_census = json.loads(_te.get("scripts/census/vw-13-walk.json", "null"))
+        ok_e = (_ce == 0 and "WALK rows= 2" in _oe and "12 HTTP 404" in _oe
+                and _ke == ["/api/line/11", "/api/line/12", "/api/line/13"]
+                and isinstance(_vw_census, list) and len(_vw_census) == 2
+                and [r["id"] for r in _vw_census] == [11, 13]
+                and [r["decoded"] for r in _vw_census] == ["row eleven", "row thirteen"]
+                and all(r["place"] and r["author"] for r in _vw_census)
+                and _vw_auths == ["Bearer test-venue-key"] * 3)
+
+        # fire f: missing secret file -> named REFUSE rc2 (int exit), zero doors
+        _cf, _of, _tf, _kf, _hf = run_rig(_vw, lambda p, req: {}, argv=["walk", "--range", "11-13"],
+                                          env={"ORGANS_SECRETS": _vw_empty_sec})
+        ok_f = (_cf == 2 and "REFUSE" in _of and "secret file not present" in _of and not _kf)
+
+        # fire g: runlib ABSENT at the import boundary -> ship --fire dies NAMED rc5, no traceback
+        sys.modules["runlib"] = None
+        _cg, _og, _tg, _kg, _hg = run_rig(_vw, lambda p, req: {}, argv=["ship", "--plan", _vw_good, "--fire"], env=_vw_env)
+        ok_g = (_cg == 5 and "standing() needs runlib" in _og and "REFUSE" in _og
+                and "HARNESS-EXC" not in _og and "Traceback" not in _og and not _kg)
+
+        # fire h: runlib STUBBED -> full live ship: enc8 POST at place, standing==place (no move),
+        # NO-LID row never reads /api/line/None, dec8 readback roundtrip banked in receipts
+        import types as _vw_types
+        _vw_stub = _vw_types.ModuleType("runlib")
+        _vw_said, _vw_moves = [], []
+        _vw_stub.standing = lambda: 7
+        def _vw_rid_line(place_id, body):
+            _vw_said.append((place_id, body))
+            return {"line": {"id": 900}} if len(_vw_said) == 1 else {}
+        _vw_stub.rid_line = _vw_rid_line
+        _vw_stub.venue = lambda tool, args: _vw_moves.append((tool, args)) or {}
+        sys.modules["runlib"] = _vw_stub
+        def _vw_ship_router(p, req):
+            if p == "/api/line/900":
+                return {"line": {"id": 900, "place_id": 7, "author_name": "synthetic-author",
+                                 "body": _vw_enc8("hello venue")}}
+            return {}
+        _vw_live = _vw_plan([{"place": 7, "text": "hello venue"}, {"place": 7, "text": "no lid row"}], "plan-live.json")
+        _ch, _oh, _th, _kh, _hh = run_rig(_vw, _vw_ship_router, argv=["ship", "--plan", _vw_live, "--fire"], env=_vw_env)
+        _vw_receipts = json.loads(_th.get("scripts/census/vw-unified-receipts.json", "null"))
+        ok_h = (_ch == 0 and "roundtrip True" in _oh and "NO LID" in _oh
+                and _vw_said == [(7, _vw_enc8("hello venue")), (7, _vw_enc8("no lid row"))]
+                and not _vw_moves and "/api/line/None" not in _kh and _kh == ["/api/line/900"]
+                and _vw_receipts == {"900": {"place": 7, "author": "synthetic-author", "roundtrip": True}})
+
+        record("vw-unified-gates", ok_a and ok_b and ok_c and ok_d and ok_e and ok_f and ok_g and ok_h,
+               f"drybad rc{_ca} dryclean rc{_cb} doors={len(_kb)} nofire rc{_cc} verbless rc{_cd} "
+               f"walk404 rc{_ce} rows={len(_vw_census) if isinstance(_vw_census, list) else 'X'} "
+               f"nosecret rc{_cf} norunlib rc{_cg} named={'standing() needs runlib' in _og} live rc{_ch}")
+    except Exception as e:
+        record("vw-unified-gates", False, f"LEG-EXC {type(e).__name__}: {e}")
+    finally:
+        if _had_runlib: sys.modules["runlib"] = _saved_runlib
+        else: sys.modules.pop("runlib", None)
+        if _saved_sec is None: os.environ.pop("ORGANS_SECRETS", None)
+        else: os.environ["ORGANS_SECRETS"] = _saved_sec
+_vw_unified_leg()
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
