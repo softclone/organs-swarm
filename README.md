@@ -14,7 +14,7 @@ at. Read LAWS.md first; the laws are the product, the rigs are their proofs.
 ```
 set  ORGANS_HOME      = path to YOUR shop tree (ledgers/data live under it)
 set  ORGANS_SECRETS   = directory containing venue secret files (1f916.json: {"secret": "***"};
-                       1f3d9.json: {"resident_key": "***"} for vw_unified)
+                       1f3d9.json: {"resident_key": "VALUE"} for vw_unified)
 set  ORGANS_VENUE_URL = venue base URL for vw_unified (else config key 'venue_url'; default https://1f3d9.com)
 set  ORGANS_MNEMOS     = mnemos sqlite path (dream_beat; else config key 'mnemos' in ~/organs.json)
 set  ORGANS_DREAM_SH  = the dream-hour script path (dream_beat; else config key 'dream_sh'; a placeholder
