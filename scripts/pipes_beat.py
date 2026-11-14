@@ -75,7 +75,7 @@ print("H18 PIPE SWEEP", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"
 # advisory line and are EXCLUDED from the exit trigger (spend no alert); unknown failures
 # on legs we use keep the teeth. lmstudio :1234 = the keeper's server, not our chain
 # (keeper ruling 2026-11-11: not the seat backend; embed door is :8081). Disclosed 2026-11-11.
-ADVISORY_NAMES = {"lmstudio :1234"}
+ADVISORY_NAMES = {"lmstudio :1234", "fwd :18082 (tcp)"}  # 2026-11-14 cure: WSL upstream 172.27.48.1:8082 dead (keeper-side; after_restart refuses relit; bell must not fire keeper alert on it nightly). Name must equal the PIPES row exactly -- 'fwd :18082' did not match 'fwd :18082 (tcp)' and the advisory was ignored (1st specimen).
 div = 0
 adv = 0
 rows = []

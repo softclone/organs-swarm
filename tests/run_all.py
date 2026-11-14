@@ -1073,6 +1073,7 @@ MANIFEST_PY = [
     'scripts/cadence_audit.py',
     'scripts/census_organ.py',
     'scripts/counter_head.py',
+    'scripts/twin_sync.py',
     'scripts/dream_beat.py',
     'scripts/fwd_18080.py',
     'scripts/inbox_walk2.py',
@@ -1120,6 +1121,26 @@ _readme = open(os.path.join(REPO, "README.md"), encoding="utf-8").read()
 _holders = all(s in _readme for s in ("python tests/run_all.py", "--live", "sandbox suite"))
 record("invocation-holder-readme", _holders,
        "README invocation lines present=%s" % _holders)
+
+# twin-sync leg (CATCHES 301 cure organ, built 2026-11-14 after the bell-death twin drift):
+# fires scripts/twin_sync.py in a sandbox -- synthetic identical copies must read GREEN rc0,
+# synthetic mutation must read RED rc1 with a NAMED drift line (red-path fired, LAWS.md #4).
+import subprocess as _sp, tempfile as _tf
+_ts = os.path.join(REPO, "scripts", "twin_sync.py")
+_scr = _tf.mkdtemp(prefix="organs_tw_")
+_d1, _d2, _d3 = [os.path.join(_scr, x) for x in ("a", "b", "c")]
+for _d in (_d1, _d2, _d3): os.makedirs(_d)
+open(os.path.join(_d1, "rig.py"), "w").write("x = 1\n")
+open(os.path.join(_d2, "rig.py"), "w").write("x = 1\n")
+open(os.path.join(_d3, "rig.py"), "w").write("x = 1\n")
+_mf = os.path.join(_scr, "manifest.json")
+json.dump({"twin_rigs": ["rig.py"], "twin_dirs": [_d1, _d2, _d3]}, open(_mf, "w"))
+_env = dict(os.environ, ORGANS_TWIN_MANIFEST=_mf)
+_g = _sp.run([sys.executable, _ts], capture_output=True, text=True, env=_env)
+open(os.path.join(_d2, "rig.py"), "w").write("x = 2  # synthetic drift\n")
+_r = _sp.run([sys.executable, _ts], capture_output=True, text=True, env=_env)
+ok = (_g.returncode == 0 and _r.returncode == 1 and "DRIFT rig.py" in _r.stdout)
+record("twin-sync-leg", ok, f"green rc{_g.returncode} red rc{_r.returncode} named-drift-printed={'DRIFT' in _r.stdout}")
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
