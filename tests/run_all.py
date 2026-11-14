@@ -1078,6 +1078,7 @@ MANIFEST_PY = [
     'scripts/dream_beat.py',
     'scripts/fire_genre.py',
     'scripts/fwd_18080.py',
+    'scripts/hf_mirror.py',
     'scripts/inbox_leg.py',
     'scripts/inbox_walk2.py',
     'scripts/mesh_leg.py',
@@ -1898,6 +1899,161 @@ def _tts_clip_leg():
         if _saved_model is None: os.environ.pop("ORGANS_TTS_MODEL", None)
         else: os.environ["ORGANS_TTS_MODEL"] = _saved_model
 _tts_clip_leg()
+
+# ---------- hf-mirror-gates (Tier-2 hf_mirror organ: the 11-copy HF shelf-push family
+# (_ship_v* 9 + hf_shelf_push twins) distilled; hygiene gate IN CODE before any hub call,
+# HfApi behind the _hf_api() import seam). HERMETIC hub law: zero real hub calls, zero real
+# tokens -- huggingface_hub is stubbed at the IMPORT BOUNDARY (sys.modules), the secret door
+# is a scratch file carrying a stub value that is never printed. Fires through run_rig on a
+# SCRATCH COPY with local.json BESIDE it + expanduser("~/organs.json") mocked away (the host
+# config must never leak into the sandbox). Fixtures live in tests/fixtures/ -- a missing
+# fixture records a NAMED FAIL, never a harness crash. Fires: (a) push --dry two fixture
+# files -> rc0 two [dry] lines bytes= gate-pass ZERO hub calls (hub module None: any import
+# attempt would die named); (a2) dry gate-fail row named GATE-FAIL; (b) arg-shape refusals
+# rc2 before any door: verbless, push missing --files, path escape (incl. the sibling-prefix
+# class), missing file, check without repo, unknown verb; (c) check with SECRETS at an empty
+# dir -> REFUSE secret door absent rc2; (d) check with SECRETS unset + no config -> REFUSE
+# no secrets_dir rc2; (e) stub seam repo_info raises -> HUB-DEAD named rc3, zero network;
+# (f) stub seam green -> hub check files=2 rc0 (read-only door); (g) hub module absent ->
+# HUB-DEAD rc3 named; (h) stub upload green -> pushed 2/2 rc0; (i) stub upload partial death
+# -> pushed 1/2 rc3, dead row named. Loud-named: leg defects record a NAMED FAIL.
+def _hf_mirror_leg():
+    _saved_sec = os.environ.get("SECRETS")
+    _saved_expanduser = os.path.expanduser
+    _had_hf = "huggingface_hub" in sys.modules
+    _saved_hf = sys.modules.get("huggingface_hub")
+    try:
+        _hm_src = os.path.join(REPO, "scripts", "hf_mirror.py")
+        _hm_f1 = os.path.join(HERE, "fixtures", "hf_a.md")
+        _hm_f2 = os.path.join(HERE, "fixtures", "hf_b.md")
+        for _p in (_hm_src, _hm_f1, _hm_f2):
+            if not os.path.exists(_p):
+                record("hf-mirror-gates", False, "fixture absent: " + os.path.basename(_p))
+                return
+        _hm_scr = tempfile.mkdtemp(prefix="organs_hm_")
+        # host-config isolation: ~/organs.json resolves to a scratch absent path all leg long
+        os.path.expanduser = lambda p: os.path.join(_hm_scr, "no-organs.json") if p == "~/organs.json" else _saved_expanduser(p)
+        _hm_repo = "fixture-org/fixture-corpus"
+        _hm_kits = []
+        for _kn, _pin in (("kit", {"hf_repo": _hm_repo}), ("kit2", {})):
+            _kd = os.path.join(_hm_scr, _kn); os.makedirs(_kd)
+            shutil.copy(_hm_src, os.path.join(_kd, "hf_mirror.py"))
+            shutil.copy(os.path.join(REPO, "scripts", "scan_organ.py"), os.path.join(_kd, "scan_organ.py"))
+            json.dump(_pin, open(os.path.join(_kd, "local.json"), "w", encoding="utf-8"))
+            _hm_kits.append(os.path.join(_kd, "hf_mirror.py"))
+        _hm, _hm2 = _hm_kits
+        _hm_b1 = open(_hm_f1, encoding="utf-8").read()
+        _hm_b2 = open(_hm_f2, encoding="utf-8").read()
+        # bytes measured through run_rig's OWN write channel (text mode: newline
+        # translation is OS-dependent) -- never assumed from the in-memory string
+        def _hm_bytes(body):
+            _bp = os.path.join(_hm_scr, "bytes_probe.md")
+            open(_bp, "w", encoding="utf-8").write(body)
+            return os.path.getsize(_bp)
+        _hm_n1, _hm_n2 = _hm_bytes(_hm_b1), _hm_bytes(_hm_b2)
+        _hm_files = {"canon/hf_a.md": _hm_b1, "canon/hf_b.md": _hm_b2}
+        _hm_bad = "leak shape Bearer AbCdEf1234567890AbCdEf1234567890 tail" + chr(10)
+        _hm_empty_sec = os.path.join(_hm_scr, "empty_sec"); os.makedirs(_hm_empty_sec)
+        _hm_sec = os.path.join(_hm_scr, "sec"); os.makedirs(_hm_sec)
+        _hm_stub_tok = "F-STUB-VALUE-NEVER-PRINTED"
+        json.dump({"write_token": _hm_stub_tok}, open(os.path.join(_hm_sec, "huggingface.json"), "w", encoding="utf-8"))
+        _hm_env = {"SECRETS": _hm_sec}
+        _hm_seen = []
+        import types as _hm_types
+        def _hm_stub(dead=False, nfiles=2, upload_dead=False):
+            _m = _hm_types.ModuleType("huggingface_hub")
+            class _Api:
+                def __init__(self, token=None): _hm_seen.append(("token", token))
+                def repo_info(self, repo, files_metadata=True):
+                    _hm_seen.append(("repo_info", repo))
+                    if dead: raise RuntimeError("hermetic: hub door dead")
+                    return _hm_types.SimpleNamespace(siblings=[object()] * nfiles)
+                def upload_file(self, p, repo, path_in_repo=None):
+                    _hm_seen.append(("upload", path_in_repo, repo))
+                    if upload_dead and path_in_repo == "canon/hf_b.md":
+                        raise RuntimeError("hermetic: upload door dead")
+                    return None
+            _m.HfApi = _Api
+            return _m
+
+        # fire a: push --dry -> rc0, two [dry] lines, gate-pass, ZERO hub (module None:
+        # any import attempt dies ImportError -- dry must never reach the seam)
+        sys.modules["huggingface_hub"] = None
+        _ca, _oa, _ta, _ka, _ha = run_rig(_hm, lambda p, req: {}, files=_hm_files,
+            argv=["push", "--files", "canon/hf_a.md,canon/hf_b.md", "--dry"], env={"SECRETS": _hm_empty_sec})
+        ok_a = (_ca == 0 and "[dry] push canon/hf_a.md bytes=%d gate-pass repo=%s ZERO hub calls" % (_hm_n1, _hm_repo) in _oa
+                and "[dry] push canon/hf_b.md bytes=%d gate-pass repo=%s ZERO hub calls" % (_hm_n2, _hm_repo) in _oa
+                and "HUB-DEAD" not in _oa and not _ka)
+        # fire a2: dry gate-fail row named (planted Bearer shape), clean row still gate-pass
+        _ca2, _oa2, _ta2, _ka2, _ha2 = run_rig(_hm, lambda p, req: {},
+            files={**_hm_files, "canon/hf_bad.md": _hm_bad},
+            argv=["push", "--files", "canon/hf_a.md,canon/hf_bad.md", "--dry"], env={"SECRETS": _hm_empty_sec})
+        ok_a2 = (_ca2 == 0 and "canon/hf_bad.md" in _oa2 and "GATE-FAIL" in _oa2 and "gate-pass" in _oa2 and not _ka2)
+
+        # fire b: arg-shape refusals -> rc2 BEFORE any door, each named (hub module still None)
+        _hm_refusals = [
+            (_hm, [], "REFUSE: needs verb push|check"),
+            (_hm, ["push"], "REFUSE: push needs --files"),
+            (_hm, ["push", "--files", "../escape.md", "--dry"], "REFUSE: path escapes HOME"),
+            (_hm, ["push", "--files", "../homeX/sibling.md", "--dry"], "REFUSE: path escapes HOME"),
+            (_hm, ["push", "--files", "canon/absent.md", "--dry"], "REFUSE: file absent"),
+            (_hm2, ["check"], "REFUSE: check needs --repo or hf_repo config"),
+            (_hm, ["bogus"], "REFUSE: unknown verb: bogus"),
+        ]
+        ok_b = True
+        for _rig, _argv, _want in _hm_refusals:
+            _cb, _ob, _tb, _kb, _hb = run_rig(_rig, lambda p, req: {}, files=_hm_files, argv=_argv, env={"SECRETS": _hm_empty_sec})
+            ok_b = ok_b and _cb == 2 and _want in _ob and not _kb
+
+        # fire c: check, SECRETS at an EMPTY dir -> secret door absent rc2, zero hub
+        _cc, _oc, _tc, _kc, _hc = run_rig(_hm, lambda p, req: {}, argv=["check"], env={"SECRETS": _hm_empty_sec})
+        ok_c = (_cc == 2 and "REFUSE: secret door absent: huggingface.json" in _oc and not _kc)
+        # fire d: check, SECRETS UNSET, no secrets config anywhere -> no secrets_dir rc2
+        os.environ.pop("SECRETS", None)
+        _cd, _od, _td, _kd, _hd = run_rig(_hm, lambda p, req: {}, argv=["check"])
+        ok_d = (_cd == 2 and "REFUSE: no secrets_dir config" in _od and not _kd)
+
+        # fire e: stub seam, repo_info raises -> HUB-DEAD named rc3, zero network; the seam
+        # received the named-field stub token and the pinned repo; the value never prints
+        sys.modules["huggingface_hub"] = _hm_stub(dead=True)
+        _ce, _oe, _te, _ke, _he = run_rig(_hm, lambda p, req: {}, argv=["check"], env=_hm_env)
+        ok_e = (_ce == 3 and "HUB-DEAD named: RuntimeError: hermetic: hub door dead" in _oe
+                and "Traceback" not in _oe and not _ke
+                and ("token", _hm_stub_tok) in _hm_seen and ("repo_info", _hm_repo) in _hm_seen
+                and _hm_stub_tok not in _oe)
+        # fire f: stub seam green -> hub check files=2 rc0 (read-only door)
+        sys.modules["huggingface_hub"] = _hm_stub(nfiles=2)
+        _cf, _of, _tf, _kf, _hf = run_rig(_hm, lambda p, req: {}, argv=["check"], env=_hm_env)
+        ok_f = (_cf == 0 and "hub check %s files=2 (read-only door)" % _hm_repo in _of and not _kf and _hm_stub_tok not in _of)
+        # fire g: hub module ABSENT at the import boundary -> HUB-DEAD rc3 named
+        sys.modules["huggingface_hub"] = None
+        _cg, _og, _tg, _kg, _hg = run_rig(_hm, lambda p, req: {}, argv=["check"], env=_hm_env)
+        ok_g = (_cg == 3 and "HUB-DEAD: huggingface_hub not importable" in _og and not _kg)
+        # fire h: stub upload green -> pushed 2/2 rc0, uploads at the pinned repo
+        sys.modules["huggingface_hub"] = _hm_stub()
+        _ch, _oh, _th, _kh, _hh = run_rig(_hm, lambda p, req: {}, files=_hm_files,
+            argv=["push", "--files", "canon/hf_a.md,canon/hf_b.md"], env=_hm_env)
+        ok_h = (_ch == 0 and "pushed canon/hf_a.md bytes=%d" % _hm_n1 in _oh and "pushed 2/2 stamp=" in _oh
+                and not _kh and ("upload", "canon/hf_a.md", _hm_repo) in _hm_seen
+                and ("upload", "canon/hf_b.md", _hm_repo) in _hm_seen and _hm_stub_tok not in _oh)
+        # fire i: stub upload partial death -> pushed 1/2 rc3, dead row named, no traceback
+        sys.modules["huggingface_hub"] = _hm_stub(upload_dead=True)
+        _ci, _oi, _ti, _ki, _hi = run_rig(_hm, lambda p, req: {}, files=_hm_files,
+            argv=["push", "--files", "canon/hf_a.md,canon/hf_b.md"], env=_hm_env)
+        ok_i = (_ci == 3 and "HUB-DEAD named canon/hf_b.md" in _oi and "pushed 1/2 stamp=" in _oi
+                and "Traceback" not in _oi and not _ki)
+        record("hf-mirror-gates", ok_a and ok_a2 and ok_b and ok_c and ok_d and ok_e and ok_f and ok_g and ok_h and ok_i,
+               "a=%d a2=%d b=%d c=%d d=%d e=%d f=%d g=%d h=%d i=%d dryrc=%d doors=%d"
+               % (ok_a, ok_a2, ok_b, ok_c, ok_d, ok_e, ok_f, ok_g, ok_h, ok_i, _ca, len(_ka)))
+    except Exception as e:
+        record("hf-mirror-gates", False, "LEG-EXC %s: %s" % (type(e).__name__, e))
+    finally:
+        os.path.expanduser = _saved_expanduser
+        if _had_hf: sys.modules["huggingface_hub"] = _saved_hf
+        else: sys.modules.pop("huggingface_hub", None)
+        if _saved_sec is None: os.environ.pop("SECRETS", None)
+        else: os.environ["SECRETS"] = _saved_sec
+_hf_mirror_leg()
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
