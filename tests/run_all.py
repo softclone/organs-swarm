@@ -1079,6 +1079,7 @@ MANIFEST_PY = [
     'scripts/fire_genre.py',
     'scripts/fwd_18080.py',
     'scripts/hf_mirror.py',
+    'scripts/inbox_gate.py',
     'scripts/inbox_leg.py',
     'scripts/inbox_walk2.py',
     'scripts/mesh_leg.py',
@@ -2054,6 +2055,201 @@ def _hf_mirror_leg():
         if _saved_sec is None: os.environ.pop("SECRETS", None)
         else: os.environ["SECRETS"] = _saved_sec
 _hf_mirror_leg()
+
+# ---------- inbox-gate-gates (inbox_gate organ: the leg118 rig3b coverage ack-loop +
+# rig2 band sweep distilled). THE LAW in code: numeric ack proxies INVERT on quiet
+# threads; the coverage form is authority -- (a) every served post swept (200 +
+# has_more False), (b) zero unbanked ids in band, (c) re-read served==banked -- only
+# THEN ack, and every refusal precedes POST. HERMETIC: the organ's module-level
+# _opener seam is stubbed per fire (records method/path/headers/body); the real
+# urlopen is POISONED for the whole leg (any seam bypass dies named), time.sleep
+# mocked, ~/organs.json mocked away, organ exec'd from a scratch kit copy with an
+# empty local.json (host config never leaks). Fires: (a) check green rc0 zero POST
+# zero writes; (b) ack --dry plan green ZERO POST; (c) ack live green: exactly 1
+# POST, 5-field wrapper verbatim, receipt gate, postack read, secret only in the
+# Authorization header, stub value never printed; (d) unbanked served id with no
+# post_id -> REFUSE rc2 zero POST; (e) has_more True post -> REFUSE rc2 condition
+# (a) zero POST; (f) check red missing named, bank untouched; (g) 429-HTML body ->
+# DOOR-DEAD rc3; (h) non-JSON 200 body -> NON-JSON + DOOR-DEAD rc3; (i) 400 flood ->
+# STARVE-GUARD rc3 early stop (bounded calls); (j) missing secret door -> REFUSE rc2
+# zero door calls; (k) bare invocation rc2; (l) arg-shape refusals rc2; (m) named
+# field absent rc2; (n) live sweep banks the unbanked hit store-then-advance, re-reads,
+# then acks (1 POST). Loud-named: leg defects record a NAMED FAIL.
+def _inbox_gate_leg():
+    _ig_envkeys = ("ORGANS_HOME", "ORGANS_SECRETS", "ORGANS_INBOX_URL", "ORGANS_INBOX_UA")
+    _saved_env = {k: os.environ.get(k) for k in _ig_envkeys}
+    _saved_expanduser = os.path.expanduser
+    _saved_urlopen = urllib.request.urlopen
+    _saved_sleep = time.sleep
+    try:
+        _ig_src = os.path.join(REPO, "scripts", "inbox_gate.py")
+        if not os.path.exists(_ig_src):
+            record("inbox-gate-gates", False, "organ absent: scripts/inbox_gate.py")
+            return
+        _ig_scr = tempfile.mkdtemp(prefix="organs_ig_")
+        os.path.expanduser = lambda p: os.path.join(_ig_scr, "no-organs.json") if p == "~/organs.json" else _saved_expanduser(p)
+        def _ig_poison(req, timeout=None, **kw):
+            raise AssertionError("network bypass: _opener seam not used")
+        urllib.request.urlopen = _ig_poison
+        time.sleep = lambda s: None
+        _ig_kit = os.path.join(_ig_scr, "kit"); os.makedirs(_ig_kit)
+        shutil.copy(_ig_src, os.path.join(_ig_kit, "inbox_gate.py"))
+        json.dump({}, open(os.path.join(_ig_kit, "local.json"), "w", encoding="utf-8"))
+        _ig_rig = os.path.join(_ig_kit, "inbox_gate.py")
+        _ig_src_text = open(_ig_rig, encoding="utf-8").read()
+        _ig_home = os.path.join(_ig_scr, "home"); os.makedirs(_ig_home)
+        _ig_sec = os.path.join(_ig_scr, "sec"); os.makedirs(_ig_sec)
+        _ig_stub = "IG-STUB-SECRET-NEVER-PRINTED"
+        json.dump({"secret": _ig_stub}, open(os.path.join(_ig_sec, "1f916.json"), "w", encoding="utf-8"))
+        _ig_empty_sec = os.path.join(_ig_scr, "empty_sec"); os.makedirs(_ig_empty_sec)
+        _ig_badfield_sec = os.path.join(_ig_scr, "badfield_sec"); os.makedirs(_ig_badfield_sec)
+        json.dump({"other_field": "x"}, open(os.path.join(_ig_badfield_sec, "1f916.json"), "w", encoding="utf-8"))
+        _ig_offer = {"version": 1, "timestamp": "2026-01-01T00:00:00Z", "comments": 102, "mentions": 0, "seal": "fixture-seal"}
+        _ig_rows = [{"id": 101, "post_id": 11}, {"id": 102, "post_id": 12}]
+        def _ig_me(rows, offer):
+            slv = {b: [] for b in ("replies", "comments_on_your_posts", "in_threads_you_joined", "mentions_of_you")}
+            slv["replies"] = list(rows)
+            return {"me": {"now_utc": "x", "since_last_visit": slv, "ack_cursor": offer}}
+        _ig_postdocs = {11: {"comments": [{"id": 101, "post_id": 11}], "has_more": False},
+                        12: {"comments": [{"id": 102, "post_id": 12}], "has_more": False},
+                        13: {"comments": [], "has_more": False}}
+        def _ig_bank(rows):
+            p = os.path.join(_ig_home, "bank.jsonl")
+            open(p, "w", encoding="utf-8").write("".join(json.dumps({"bucket": "b", "row": r}) + chr(10) for r in rows))
+            return p
+        def _ig_router(served, offer, postdocs=None, me_err=None, me_raw=None, post_err=None, receipt=None):
+            _st = {"acked": False}
+            _pd = _ig_postdocs if postdocs is None else postdocs
+            def router(p, req):
+                if p.startswith("/api/me/ack"):
+                    _st["acked"] = True
+                    return receipt if receipt is not None else {"advanced": True, "mode": "lossless", "comments": offer["comments"], "mentions": offer["mentions"]}
+                if p.startswith("/api/me"):
+                    if me_err: return ("raise", me_err[0], me_err[1])
+                    if me_raw is not None: return me_raw
+                    return _ig_me([] if _st["acked"] else served, None if _st["acked"] else offer)
+                m = re.match(r"/api/post/(\d+)", p)
+                if m:
+                    if post_err: return ("raise", post_err[0], post_err[1])
+                    return _pd.get(int(m.group(1)), {"comments": [], "has_more": False})
+                return {}
+            return router
+        def _ig_fire(argv, router, env=None):
+            _ns = {"__name__": "inbox_gate_test", "__file__": _ig_rig}
+            _calls = []
+            def _opener(req, timeout=30):
+                _m = getattr(req, "method", None) or ("POST" if req.data is not None else "GET")
+                _p = req.full_url.split("://", 1)[1]; _p = _p[_p.find("/"):]
+                _body = json.loads(req.data.decode()) if req.data else None
+                _calls.append((_m, _p, dict(req.headers), _body))
+                _r = router(_p, req)
+                if isinstance(_r, tuple) and _r[0] == "raise":
+                    raise urllib.error.HTTPError(req.full_url, _r[1], "stub", None, io.BytesIO(_r[2]))
+                return FakeResp(json.dumps(_r).encode() if isinstance(_r, (dict, list)) else _r)
+            exec(compile(_ig_src_text, _ig_rig, "exec"), _ns)
+            _ns["_opener"] = _opener
+            os.environ["ORGANS_HOME"] = _ig_home
+            os.environ["ORGANS_SECRETS"] = _ig_sec
+            for k, v in (env or {}).items(): os.environ[k] = v
+            _buf = io.StringIO(); _rc = 0
+            try:
+                with contextlib.redirect_stdout(_buf):
+                    _rc = _ns["main"](argv)
+            except SystemExit as e:
+                _rc = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+            except Exception as e:
+                _rc = 90; _buf.write("LEG-EXC %s: %s" % (type(e).__name__, e))
+            return _rc, _buf.getvalue(), _calls
+        def _ig_posts(calls): return [c for c in calls if c[0] == "POST"]
+        _ig_bankpath = _ig_bank(_ig_rows)
+        _ig_base_argv = ["--posts", "11,12", "--bank", _ig_bankpath]
+        # fire a: check green -> rc0, per-post swept/banked/missing verdicts, zero POST, zero writes
+        _ba = open(_ig_bankpath, encoding="utf-8").read()
+        _ca, _oa, _ka = _ig_fire(["check"] + _ig_base_argv, _ig_router(_ig_rows, _ig_offer))
+        ok_a = (_ca == 0 and "COVERAGE GREEN" in _oa and "POST 11 swept=True banked=1 missing=[]" in _oa
+                and "POST 12 swept=True banked=1 missing=[]" in _oa and not _ig_posts(_ka)
+                and open(_ig_bankpath, encoding="utf-8").read() == _ba and _ig_stub not in _oa)
+        # fire b: ack --dry green -> plan proven, ZERO POST, zero writes
+        _cb, _ob, _kb = _ig_fire(["ack"] + _ig_base_argv + ["--dry"], _ig_router(_ig_rows, _ig_offer))
+        ok_b = (_cb == 0 and "ACK-PLAN green" in _ob and "ZERO POST" in _ob and not _ig_posts(_kb)
+                and any(c[0] == "GET" for c in _kb) and open(_ig_bankpath, encoding="utf-8").read() == _ba
+                and _ig_stub not in _ob)
+        # fire c: ack live green -> exactly 1 POST, wrapper verbatim, receipt gate, postack read
+        _cc, _oc, _kc = _ig_fire(["ack"] + _ig_base_argv, _ig_router(_ig_rows, _ig_offer))
+        _pc = _ig_posts(_kc)
+        ok_c = (_cc == 0 and len(_pc) == 1 and _pc[0][1] == "/api/me/ack" and _pc[0][3] == {"up_to": _ig_offer}
+                and "INBOX-GATE GREEN" in _oc and "POSTACK served=0" in _oc
+                and any(c[2].get("Authorization") == "Bearer " + _ig_stub for c in _kc)
+                and _ig_stub not in _oc and "Traceback" not in _oc)
+        # fire d: unbanked served id with no post_id to sweep -> REFUSE rc2, zero POST
+        _ig_d_served = [{"id": 101, "post_id": 11}, {"id": 103}]
+        _cd, _od, _kd = _ig_fire(["ack"] + _ig_base_argv, _ig_router(_ig_d_served, _ig_offer))
+        ok_d = (_cd == 2 and "REFUSE" in _od and "unbanked" in _od and "103" in _od
+                and not _ig_posts(_kd) and _ig_stub not in _od)
+        # fire e: has_more True post -> condition (a) REFUSE rc2 zero POST; check red too
+        _ig_e_pd = {11: _ig_postdocs[11], 12: {"comments": [{"id": 102, "post_id": 12}], "has_more": True}}
+        _ce, _oe, _ke = _ig_fire(["ack"] + _ig_base_argv, _ig_router(_ig_rows, _ig_offer, postdocs=_ig_e_pd))
+        _ce2, _oe2, _ke2 = _ig_fire(["check"] + _ig_base_argv, _ig_router(_ig_rows, _ig_offer, postdocs=_ig_e_pd))
+        ok_e = (_ce == 2 and "REFUSE" in _oe and "not swept" in _oe and not _ig_posts(_ke)
+                and _ce2 == 2 and "COVERAGE RED" in _oe2 and not _ig_posts(_ke2))
+        # fire f: check red, missing named, bank untouched, zero POST
+        _ig_f_bank = _ig_bank([_ig_rows[0]])
+        _bf = open(_ig_f_bank, encoding="utf-8").read()
+        _cf, _of, _kf = _ig_fire(["check", "--posts", "11,12", "--bank", _ig_f_bank], _ig_router(_ig_rows, _ig_offer))
+        ok_f = (_cf == 2 and "COVERAGE RED" in _of and "missing=[102]" in _of and not _ig_posts(_kf)
+                and open(_ig_f_bank, encoding="utf-8").read() == _bf)
+        # fire g: 429-HTML body -> DOOR-DEAD named rc3, zero POST, no traceback
+        _cg, _og, _kg = _ig_fire(["check"] + _ig_base_argv,
+            _ig_router(_ig_rows, _ig_offer, me_err=(429, b"<html><body>rate limited</body></html>")))
+        ok_g = (_cg == 3 and "DOOR-DEAD" in _og and "429-HTML" in _og and not _ig_posts(_kg) and "Traceback" not in _og)
+        # fire h: non-JSON 200 body -> NON-JSON named + DOOR-DEAD rc3 (CATCHES 302 shape)
+        _ch, _oh, _kh = _ig_fire(["check"] + _ig_base_argv,
+            _ig_router(_ig_rows, _ig_offer, me_raw=b"<html>302 shell</html>"))
+        ok_h = (_ch == 3 and "NON-JSON" in _oh and "DOOR-DEAD" in _oh and not _ig_posts(_kh) and "Traceback" not in _oh)
+        # fire i: 400 flood -> STARVE-GUARD rc3 early stop: 1 door + 3 post attempts, zero POST
+        _ci, _oi, _ki = _ig_fire(["check", "--posts", "11,12,13", "--bank", _ig_bankpath],
+            _ig_router(_ig_rows, _ig_offer, post_err=(400, b"{}")))
+        ok_i = (_ci == 3 and "STARVE-GUARD" in _oi and len(_ki) == 4 and not _ig_posts(_ki))
+        # fire j: missing secret door -> REFUSE rc2, ZERO door calls (lazy load before the door)
+        _cj, _oj, _kj = _ig_fire(["check"] + _ig_base_argv, _ig_router(_ig_rows, _ig_offer),
+            env={"ORGANS_SECRETS": _ig_empty_sec})
+        ok_j = (_cj == 2 and "REFUSE" in _oj and "secret door absent" in _oj and not _kj)
+        # fire k: bare invocation -> rc2 named, zero door calls
+        _ck, _ok, _kk = _ig_fire([], _ig_router(_ig_rows, _ig_offer))
+        ok_k = (_ck == 2 and "REFUSE" in _ok and "needs verb" in _ok and not _kk)
+        # fire l: arg-shape refusals -> rc2 named before any door
+        ok_l = True
+        for _argv, _want in ((["check"], "--posts"), (["check", "--posts", "11"], "--bank"),
+                             (["bogus"], "unknown verb"), (["check", "--posts", "x", "--bank", _ig_bankpath], "bad --posts")):
+            _cl, _ol, _kl = _ig_fire(_argv, _ig_router(_ig_rows, _ig_offer))
+            ok_l = ok_l and _cl == 2 and "REFUSE" in _ol and _want in _ol and not _kl
+        # fire m: named field absent in the secret door -> REFUSE rc2, zero door calls
+        _cm, _om, _km = _ig_fire(["check"] + _ig_base_argv, _ig_router(_ig_rows, _ig_offer),
+            env={"ORGANS_SECRETS": _ig_badfield_sec})
+        ok_m = (_cm == 2 and "REFUSE" in _om and "named field absent" in _om and not _km)
+        # fire n: live sweep banks the unbanked hit (store-then-advance), re-reads, then acks
+        _ig_n_bank = _ig_bank([_ig_rows[0]])
+        _cn, _on, _kn = _ig_fire(["ack", "--posts", "11,12", "--bank", _ig_n_bank], _ig_router(_ig_rows, _ig_offer))
+        _pn = _ig_posts(_kn)
+        _bn = open(_ig_n_bank, encoding="utf-8").read()
+        ok_n = (_cn == 0 and len(_pn) == 1 and "BANK post 12 new=1" in _on
+                and "re-read before ack" in _on and "INBOX-GATE GREEN" in _on
+                and '"id": 102' in _bn and len(_bn.strip().split(chr(10))) == 2 and _ig_stub not in _on)
+        _ig_post_total = sum(len(_ig_posts(x)) for x in (_ka, _kb, _kc, _kd, _ke, _ke2, _kf, _kg, _kh, _ki, _kj, _kk, _km, _kn))
+        record("inbox-gate-gates",
+               ok_a and ok_b and ok_c and ok_d and ok_e and ok_f and ok_g and ok_h and ok_i and ok_j and ok_k and ok_l and ok_m and ok_n and _ig_post_total == 2,
+               "a=%d b=%d c=%d d=%d e=%d f=%d g=%d h=%d i=%d j=%d k=%d l=%d m=%d n=%d posts=%d"
+               % (ok_a, ok_b, ok_c, ok_d, ok_e, ok_f, ok_g, ok_h, ok_i, ok_j, ok_k, ok_l, ok_m, ok_n, _ig_post_total))
+    except Exception as e:
+        record("inbox-gate-gates", False, "LEG-EXC %s: %s" % (type(e).__name__, e))
+    finally:
+        os.path.expanduser = _saved_expanduser
+        urllib.request.urlopen = _saved_urlopen
+        time.sleep = _saved_sleep
+        for k in _ig_envkeys:
+            if _saved_env[k] is None: os.environ.pop(k, None)
+            else: os.environ[k] = _saved_env[k]
+_inbox_gate_leg()
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
