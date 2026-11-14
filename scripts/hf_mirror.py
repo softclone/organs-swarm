@@ -108,7 +108,7 @@ def push(argv):
             ok += 1
             print("pushed %s bytes=%d" % (rel, os.path.getsize(p)))
         except Exception as e:
-            print("HUB-DEAD named %s: %s: %s" % (rel, type(e).__name__, str(e)[:200]))
+            print("HUB-DEAD named %s: %s: %s" % (rel, type(e).__name__, str(e)[:600]))
     print("pushed %d/%d stamp=%s" % (ok, len(rows), stamp))
     return 0 if ok == len(rows) else 3
 
