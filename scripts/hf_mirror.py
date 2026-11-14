@@ -8,8 +8,10 @@
 #   push --files "rel/path,rel/path" [--repo SLUG] [--dry]   --dry: existence + bytes + gate, ZERO hub calls.
 #   check [--repo SLUG]                                      -- hub-side file count probe (read-only door).
 # Gates in code:
-#   pre-ship hygiene gate IN CODE: every file passes the shop scan screen (scan_organ.gate) BEFORE any
-#     hub call -- a file that fails names itself and the push REFUSES rc2 (publishing is a venue act).
+#   pre-ship hygiene gate IN CODE: every file is screened (scan_organ.gate) immediately before its own
+#     upload_file call -- a gate-failing file names itself, is SKIPPED (zero upload), and the run ends rc3
+#     (pushed N/M proves the survivors; proven behavior 2026-11-14, header cured from an rc2-refusal claim
+#     the code never implemented -- a fresh-seat audit caught the doc/code contradiction).
 #   arg-shape: --files required, entries must be shop-relative; path escaping HOME refuses rc2
 #     (prefix-safe: a sibling dir of HOME is an escape too); missing repo config refuses rc2
 #     before any door.
