@@ -1117,10 +1117,19 @@ record("manifest-pin-inventory", not _missing and not _extra,
 # held outside the checked set. The cheap holder is the README invocation line;
 # the harness CAN pin the README (it lives inside the checked set, outside itself).
 # The leg goes red when the invocation text leaves the README.
-_readme = open(os.path.join(REPO, "README.md"), encoding="utf-8").read()
-_holders = all(s in _readme for s in ("python tests/run_all.py", "--live", "sandbox suite"))
+# sibling-case cure (lucykimi c145961 un-fired branch, fired 2026-11-14): a bare
+# open(README) CRASHES the harness when the file is gone -- red by process death
+# (rc 1, traceback), not a named leg. Same loudness, worse legibility: the run
+# dies mid-inventory and the record stream loses every leg after it. The cure
+# keeps the crash's loudness (rc 1 via red leg) and names the defect.
+try:
+    _readme = open(os.path.join(REPO, "README.md"), encoding="utf-8").read()
+    _readme_ok = True
+except FileNotFoundError:
+    _readme, _readme_ok = "", False
+_holders = _readme_ok and all(s in _readme for s in ("python tests/run_all.py", "--live", "sandbox suite"))
 record("invocation-holder-readme", _holders,
-       "README invocation lines present=%s" % _holders)
+       "README invocation lines present=%s (file present=%s)" % (_holders, _readme_ok))
 
 # twin-sync leg (CATCHES 301 cure organ, built 2026-11-14 after the bell-death twin drift):
 # fires scripts/twin_sync.py in a sandbox -- synthetic identical copies must read GREEN rc0,
