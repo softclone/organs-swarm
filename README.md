@@ -19,6 +19,8 @@ set  ORGANS_DREAM_SH  = the dream-hour script path (dream_beat; else config key 
                        default refuses with a named exit 2, per the F-13 audit cure)
 set  ORGANS_SEAT_URL  = engine seat base (skin/* and pipes probes hit <base>/api/health; live suite leg; GET-only)
 set  ORGANS_GGUF_FILE = default .gguf for molt/gguf_hist.py (argv also works; absent = named exit 2)
+set  ORGANS_RIGS      = run_rig registry file (SHOP config; else HOME/scripts/rigs.json; seed example in run_rig.py header)
+set  ORGANS_HONCHO_URL / ORGANS_EMBED_URL = door bases for mesh_leg/after_restart probes (defaults 127.0.0.1:8000 / :8081)
 ```
 
 Every `ORGANS_*` value ALSO rides a config file, resolved in order
@@ -29,7 +31,10 @@ Config keys (same JSON, any subset): `home`, `secrets`, `shop_dir`, `leg_dir`, `
 `COUNTER LEG INERT` advisory and skips; set it to your ledger's row token, e.g. `"C5"`),
 `pipes_extra` (pipes_beat tailnet entries: `[[label, url, expected_status], ...]`),
 `index_rules` (build_index extra family rules: `[[regex, family], ...]` — these OUTRANK every
-extension catch-all, wave-5 W02). The config file is YOURS: keep it out of git (gitignored);
+extension catch-all, wave-5 W02), `inbox_bank` (inbox_leg unread bank file — shop pins its live
+bank; default HOME/data/inbox-unread.jsonl), `genre_place` (fire_genre default place id),
+`probe_doors` (mesh_leg probe verb: `{label: url, ...}` — estate seats pinned by the shop),
+`honcho_url`/`embed_url` (mesh_leg door bases; env shims win). The config file is YOURS: keep it out of git (gitignored);
 the repo ships zero estate paths, ports, names, or row prefixes.
 
 ## What's here
@@ -52,6 +57,11 @@ the repo ships zero estate paths, ports, names, or row prefixes.
 | `scripts/dream_beat.py` | sleep/scheduler leg: checks subprocess returncode, success-marker gate (not path-echo substring) | names the dead leg |
 | `scripts/register_audit.py` | venue register falsifiability sweep | `NO CONTACT` rows booked |
 | `scripts/runlib.py` + `scan_organ.py` + `census_organ.py` + `sweep_organ_v2.py` | venue-rig family: runlib = door/gate/ledger helper (venue() wrapper law: `error` checked FIRST, L1 parse guards; stamp/verdict/complete/numgate/namegate = computed-comparison helpers; cycle/ordinal/novelty gates read from the ledger, never from head). scan_organ/census_organ = canonical scan organs (copy from canonical definition, never retype). sweep_organ_v2 = venue+llmpress sweep (has_more loop, verbatim next_since, paced; venue added strict input typing 2026-11-13: `limit` MUST be int, `since` stays string — remedy "Public read limit must be an integer from 1 to 200"). All estate paths resolved via config chain: `ORGANS_HOME`/`ORGANS_SECRETS` env > `local.json` (beside the rig) > `~/organs.json` > `~/shop` default; sweep roots via `sweep_state`/`legacy_cursors`/`venue_dir` keys. No star imports — the suite's `ast-undefined-sweep` + `portability-residue` gates are the compass for every new twin | `SEED-FAIL: door gave no numeric marker; refusing to sweep blind` (exit 2); `TOOL-ERR`/`RPC-*` prints carry the remedy text; gates print the flagged names |
+
+| `scripts/mesh_leg.py` | mesh lane runner (mesh_* family as one organ): census computed in-call, mint reserve-assert (canonical head must sit BELOW the planned slot), embed precheck before writes, honcho-before-mnemos / taste-after-honcho order laws, payloads by file never CLI prose | `REFUSE: slot collision` (exit 4, before any fire); `REFUSE: mint needs --body-file` (exit 4); `ABORT: embed precheck dead` (exit 2) |
+| `scripts/inbox_leg.py` | inbox lane runner (inbox_* family as one organ): per-bucket door census, banked-gate before ack, lazy per-door secret load, unreadable door = named refusal never a silent zero | `REFUSE: door unreadable` (exit 2); empty door prints `SERVED 0` and exits 0 |
+| `scripts/fire_genre.py` | genre fire runner (_fire_g<N> wrapper family as JSONL data rows): byte-count assert FIRST, dry plan by default, venue write only behind `--fire` | `REFUSE: byte drift in data rows` (exit 2, plan names the dead rows before any door touch) |
+| `scripts/run_rig.py` | registry dispatcher (_run_<rig><n> wrapper family): registry is SHOP config (`ORGANS_RIGS` / HOME/scripts/rigs.json; seed example in the header, never shipped), plan by default, `--fire` executes via runlib | `NO-REGISTRY` (exit 4); `REFUSE: rig <name> not in registry` (exit 5, known names printed) |
 
 ## Tests
 

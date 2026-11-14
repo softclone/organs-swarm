@@ -1075,8 +1075,11 @@ MANIFEST_PY = [
     'scripts/counter_head.py',
     'scripts/twin_sync.py',
     'scripts/dream_beat.py',
+    'scripts/fire_genre.py',
     'scripts/fwd_18080.py',
+    'scripts/inbox_leg.py',
     'scripts/inbox_walk2.py',
+    'scripts/mesh_leg.py',
     'scripts/molt/b4_taste.py',
     'scripts/molt/batch.py',
     'scripts/molt/gguf_hist.py',
@@ -1084,6 +1087,7 @@ MANIFEST_PY = [
     'scripts/pipes_beat.py',
     'scripts/register_audit.py',
     'scripts/routes_ledger.py',
+    'scripts/run_rig.py',
     'scripts/runlib.py',
     'scripts/scan_organ.py',
     'scripts/screen.py',
@@ -1150,6 +1154,82 @@ open(os.path.join(_d2, "rig.py"), "w").write("x = 2  # synthetic drift\n")
 _r = _sp.run([sys.executable, _ts], capture_output=True, text=True, env=_env)
 ok = (_g.returncode == 0 and _r.returncode == 1 and "DRIFT rig.py" in _r.stdout)
 record("twin-sync-leg", ok, f"green rc{_g.returncode} red rc{_r.returncode} named-drift-printed={'DRIFT' in _r.stdout}")
+
+# ---------- Tier-1 standards legs (MOLT4 Phase C): one red-path fire per new organ,
+# all through the run_rig harness (mocked urlopen, scratch HOME/SEC). Zero network:
+# every leg asserts the door-call list stays empty where no door should be touched.
+
+# mesh_leg: mint slot-collision must REFUSE rc4 BEFORE any fire (reserve-assert).
+# Sandbox: synthetic ledger (scanmax=10 -> slot=11) + stub counter_head whose
+# canonical head 11 occupies the planned slot. Second fire: missing body-file rc4.
+_ml = os.path.join(REPO, "scripts", "mesh_leg.py")
+_ml_scr = tempfile.mkdtemp(prefix="organs_ml_")
+_ml_body = os.path.join(_ml_scr, "body.md")
+open(_ml_body, "w", encoding="utf-8").write("synthetic lane body for the collision fire\n")
+_ml_files = {"ledgers/CORPUS.md": "| C5-10 | t | mint | Counter 10->11 |\n",
+             "scripts/counter_head.py": 'print("live head (last row canonical pair): 11")\n'}
+_c1, _o1, _t1, _k1, _h1 = run_rig(_ml, lambda p, req: {}, files=_ml_files,
+    argv=["--leg", "1", "--verb", "mint", "--body-file", _ml_body])
+_c2, _o2, _t2, _k2, _h2 = run_rig(_ml, lambda p, req: {}, files=_ml_files,
+    argv=["--leg", "1", "--verb", "mint"])
+ok = (_c1 == 4 and "REFUSE" in _o1 and "collision" in _o1 and "slot=11" in _o1
+      and _c2 == 4 and "REFUSE" in _o2 and not _k1 and not _k2)
+record("mesh-leg-mint-red", ok,
+       f"collision rc{_c1} named={'collision' in _o1} nobody rc{_c2} doors={len(_k1) + len(_k2)}")
+
+# inbox_leg: door verb on a mocked EMPTY door -> zero-row clean exit rc0 (SERVED 0,
+# OFFER null), keyed read rides the harness dummy secret. Second fire: secrets dir
+# without the secret file -> named REFUSE rc2, never a silent zero or a crash.
+_il = os.path.join(REPO, "scripts", "inbox_leg.py")
+def _il_router(p, req):
+    if p.startswith("/api/me"):
+        return {"me": {"since_last_visit": {}, "ack_cursor": None}}
+    return {}
+_c3, _o3, _t3, _k3, _h3 = run_rig(_il, _il_router, argv=["--leg", "1", "--verb", "door"])
+_il_empty_sec = os.path.join(_ml_scr, "empty_sec"); os.makedirs(_il_empty_sec, exist_ok=True)
+_c4, _o4, _t4, _k4, _h4 = run_rig(_il, _il_router, argv=["--leg", "1", "--verb", "door"],
+    env={"ORGANS_SECRETS": _il_empty_sec})
+ok = (_c3 == 0 and "SERVED 0 newly-unbanked 0" in _o3 and "OFFER null" in _o3
+      and any("/api/me" in p for p in _k3) and _c4 == 2 and "REFUSE" in _o4)
+record("inbox-leg-door-empty", ok,
+       f"empty rc{_c3} served0={'SERVED 0' in _o3} nosecret rc{_c4} doors={len(_k3)}")
+
+# fire_genre: --dry on synthetic GENRE rows -> plan rc0 with COMPUTED counts and
+# every row extracted; a byte-drift row must REFUSE rc2 before any door touch.
+_fg = os.path.join(REPO, "scripts", "fire_genre.py")
+_fg_scr = tempfile.mkdtemp(prefix="organs_fg_")
+_fg_rows = [{"n": 1, "body": "synthetic genre one"},
+            {"n": 2, "body": "synthetic genre two"},
+            {"n": 3, "body": "synthetic genre three"}]
+for _r in _fg_rows: _r["bytes"] = len(_r["body"].encode("utf-8"))
+_fg_good = os.path.join(_fg_scr, "rows.jsonl")
+open(_fg_good, "w", encoding="utf-8").write("\n".join(json.dumps(_r) for _r in _fg_rows) + "\n")
+_c5, _o5, _t5, _k5, _h5 = run_rig(_fg, lambda p, req: {}, argv=["--rows", _fg_good, "--dry"])
+_fg_drift = [dict(_fg_rows[0]), dict(_fg_rows[1], bytes=_fg_rows[1]["bytes"] + 1)]
+_fg_bad = os.path.join(_fg_scr, "rows-drift.jsonl")
+open(_fg_bad, "w", encoding="utf-8").write("\n".join(json.dumps(_r) for _r in _fg_drift) + "\n")
+_c6, _o6, _t6, _k6, _h6 = run_rig(_fg, lambda p, req: {}, argv=["--rows", _fg_bad, "--dry"])
+ok = (_c5 == 0 and f"PLAN genres={len(_fg_rows)} byte-assert-deaths=0" in _o5
+      and "FIRE-GENRE-DONE (dry)" in _o5
+      and all(f"GENRE {_r['n']}" in _o5 for _r in _fg_rows)
+      and _c6 == 2 and "REFUSE: byte drift" in _o6 and not _k5 and not _k6)
+record("fire-genre-dry-plan", ok,
+       f"dry rc{_c5} genres={len(_fg_rows)} drift rc{_c6} doors={len(_k5) + len(_k6)}")
+
+# run_rig: registry dispatcher -- known rig plans rc0 (no door touch), unknown rig
+# REFUSE rc5, absent registry NO-REGISTRY rc4. Registry is SHOP config: the leg
+# ships a synthetic one into scratch HOME only.
+_rr = os.path.join(REPO, "scripts", "run_rig.py")
+_rr_reg = {"w": {"door": "say", "args": {"place_id": 1367, "mode": "line", "body": "N"}}}
+_rr_env = {"ORGANS_RIGS": ""}
+_c7, _o7, _t7, _k7, _h7 = run_rig(_rr, lambda p, req: {}, files={"scripts/rigs.json": _rr_reg},
+    argv=["--rig", "w", "--n", "7"], env=_rr_env)
+_c8, _o8, _t8, _k8, _h8 = run_rig(_rr, lambda p, req: {}, files={"scripts/rigs.json": _rr_reg},
+    argv=["--rig", "no-such-rig"], env=_rr_env)
+_c9, _o9, _t9, _k9, _h9 = run_rig(_rr, lambda p, req: {}, argv=["--rig", "w"], env=_rr_env)
+ok = (_c7 == 0 and "RUN-RIG-DONE (plan)" in _o7 and _c8 == 5 and "REFUSE" in _o8
+      and _c9 == 4 and "NO-REGISTRY" in _o9 and not (_k7 or _k8 or _k9))
+record("run-rig-registry-red", ok, f"plan rc{_c7} unknown rc{_c8} noreg rc{_c9}")
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
