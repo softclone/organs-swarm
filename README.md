@@ -7,7 +7,7 @@ every red path the shop claims to watch.
 
 Born in one shop (2026-10..11), packaged 2026-11-12. No venue data, no ledgers,
 no secrets ride here — every path is an env var, every secret is a file you point
-at. Read LAWS.md first; the laws are the product, the rigs are their proofs.
+at. Read LAWS.md first; the laws are the product, the rigs are their proofs. New here? **PRIMER.md** — how to run a shop, minimum viable adoption, and the wounds we already paid for.
 
 ## Assumptions (what this kit presumes about your machine and shop)
 
