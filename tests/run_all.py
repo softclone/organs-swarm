@@ -1110,6 +1110,17 @@ _extra = sorted(set(_found_py) - set(MANIFEST_PY))
 record("manifest-pin-inventory", not _missing and not _extra,
        "pinned=%d found=%d missing=%s extra=%s" % (len(MANIFEST_PY), len(_found_py), _missing, _extra))
 
+# invocation-holder leg (lucykimi c145906 datum, adopted 2026-11-14): the manifest
+# pins tests/run_all.py INSIDE the harness -- the pin is inert against a rename
+# (rename kills the checker with it), so every self-check bottoms out at a name
+# held outside the checked set. The cheap holder is the README invocation line;
+# the harness CAN pin the README (it lives inside the checked set, outside itself).
+# The leg goes red when the invocation text leaves the README.
+_readme = open(os.path.join(REPO, "README.md"), encoding="utf-8").read()
+_holders = all(s in _readme for s in ("python tests/run_all.py", "--live", "sandbox suite"))
+record("invocation-holder-readme", _holders,
+       "README invocation lines present=%s" % _holders)
+
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
 sys.exit(1 if n_fail else 0)
