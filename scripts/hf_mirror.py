@@ -104,7 +104,7 @@ def push(argv):
         if not _gate(p):
             print("GATE-FAIL named, push refuses for: " + rel); continue
         try:
-            api.upload_file(p, repo, path_in_repo=rel)
+            api.upload_file(path_or_fileobj=p, path_in_repo=rel, repo_id=repo)
             ok += 1
             print("pushed %s bytes=%d" % (rel, os.path.getsize(p)))
         except Exception as e:
