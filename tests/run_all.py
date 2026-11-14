@@ -1072,6 +1072,7 @@ MANIFEST_PY = [
     'scripts/bar_audit.py',
     'scripts/boardwalk_beat.py',
     'scripts/cadence_audit.py',
+    'scripts/cage_probe.py',
     'scripts/census_organ.py',
     'scripts/counter_head.py',
     'scripts/twin_sync.py',
@@ -1753,6 +1754,219 @@ def _bar_audit_leg():
         if _saved_model is None: os.environ.pop("ORGANS_SEAT_MODEL", None)
         else: os.environ["ORGANS_SEAT_MODEL"] = _saved_model
 _bar_audit_leg()
+
+# ---------- cage-probe-gates (cage_probe organ: the 12-copy _cagemap* comparative
+# cage-battery draw family distilled). Cures fired IN CODE: max_tokens floor 131072
+# (the family habit 2000 clamped), bare-base door-path append, named rc2 refusals
+# BEFORE any door, non-JSON/choices-less door shells -> ok:false door_shell (never a
+# crash), HTTPError -> ok:false http+body, keep-first O_EXCL collision -> named
+# refusal with the first copy intact. HERMETIC: organ exec'd from scratch kit copies,
+# config pins beside the rig, ~ mocked away, host ORGANS_SEAT_* env neutralized per
+# fire and restored; every door call rides the run_rig urlopen seam (ZERO network),
+# all writes land in the scratch tmp dir. Fixture prompt lives in tests/fixtures/ --
+# a missing fixture records a NAMED FAIL, never a harness crash. Fires: (a) rc2
+# refusals before any door (verbless, unknown verb/arg, valueless flags, missing or
+# absent prompt); (b) no-config rc2 (empty chain; corrupt local.json skipped, never
+# a crash); (c) green draw: rc0, raw keep-first file at the DEFAULT out, draw+stamp
+# print, bare-base path appended, floor+prompt+model in the stub-received body;
+# (c2) full-path seat_url not double-appended; (c3) env-wins chain; (d) non-JSON /
+# choices-less / empty-choices shells -> door_shell rc3; (e) HTTPError 400 + 429 ->
+# ok:false http code + body excerpt; (f) URLError -> ok:false error Type: msg;
+# (g) keep-first collision -> named rc2, sentinel bytes intact; (h) direct probe()
+# seam fire with the family's 2000 budget -> stub receives the clamped floor.
+# Loud-named: leg defects record a NAMED FAIL.
+def _cage_probe_leg():
+    _cp_envkeys = ("ORGANS_SEAT_URL", "ORGANS_SEAT_MODEL")
+    _cp_saved_env = {k: os.environ.get(k) for k in _cp_envkeys}
+    _cp_saved_expanduser = os.path.expanduser
+    _cp_saved_strftime = time.strftime
+    try:
+        _cp_src = os.path.join(REPO, "scripts", "cage_probe.py")
+        _cp_fix = os.path.join(HERE, "fixtures", "cage_prompt.txt")
+        for _p in (_cp_src, _cp_fix):
+            if not os.path.exists(_p):
+                record("cage-probe-gates", False, "fixture absent: " + os.path.basename(_p))
+                return
+        _cp_prompt = open(_cp_fix, encoding="utf-8").read()
+        _cp_scr = tempfile.mkdtemp(prefix="organs_cp_")
+        os.path.expanduser = lambda p: os.path.join(_cp_scr, "no-home") if p in ("~", "~/organs.json") else _cp_saved_expanduser(p)
+        _cp_kit = os.path.join(_cp_scr, "kit"); os.makedirs(_cp_kit)
+        _cp_rig = os.path.join(_cp_kit, "cage_probe.py")
+        shutil.copy(_cp_src, _cp_rig)
+        json.dump({"seat_url": "http://127.0.0.1:9", "seat_model": "stub-seat"},
+                  open(os.path.join(_cp_kit, "local.json"), "w", encoding="utf-8"))
+        _cp_kit_full = os.path.join(_cp_scr, "kit-full"); os.makedirs(_cp_kit_full)
+        _cp_rig_full = os.path.join(_cp_kit_full, "cage_probe.py")
+        shutil.copy(_cp_src, _cp_rig_full)
+        json.dump({"seat_url": "http://127.0.0.1:9/v1/chat/completions", "seat_model": "stub-seat"},
+                  open(os.path.join(_cp_kit_full, "local.json"), "w", encoding="utf-8"))
+        _cp_kit_bare = os.path.join(_cp_scr, "kit-noconfig"); os.makedirs(_cp_kit_bare)
+        _cp_rig_bare = os.path.join(_cp_kit_bare, "cage_probe.py")
+        shutil.copy(_cp_src, _cp_rig_bare)
+        _cp_prompt_path = os.path.join(_cp_scr, "prompt.txt")
+        open(_cp_prompt_path, "w", encoding="utf-8").write(_cp_prompt)
+        _cp_env = {"ORGANS_SEAT_URL": "", "ORGANS_SEAT_MODEL": ""}
+        _cp_bodies = []
+        def _cp_router(text):
+            def _r(p, req):
+                _cp_bodies.append(json.loads(req.data.decode("utf-8")))
+                return {"choices": [{"message": {"content": text}}], "model": "stub-seat"}
+            return _r
+        def _cp_raw(out_dir, draw):
+            _cf = [f for f in os.listdir(out_dir) if f.startswith("cageprobe-" + draw + "-")]
+            assert len(_cf) == 1, f"raw rows {draw}: {_cf}"
+            return json.load(open(os.path.join(out_dir, _cf[0]), encoding="utf-8"))
+        _cp_ans = "synthetic cage answer: the gate is a distribution, not a wall."
+
+        # fire a: rc2 refusals BEFORE any door, each named, zero door calls
+        _cp_refusals = [
+            ([], "REFUSE: verb probe required"),
+            (["bogus"], "REFUSE: verb probe required"),
+            (["probe", "--bogus", "x"], "REFUSE: unknown arg --bogus"),
+            (["probe"], "REFUSE: --prompt FILE required and must exist"),
+            (["probe", "--prompt", os.path.join(_cp_scr, "nope.txt")], "REFUSE: --prompt FILE required and must exist"),
+            (["probe", "--prompt"], "REFUSE: --prompt without value"),
+            (["probe", "--prompt", _cp_prompt_path, "--draw"], "REFUSE: --draw without value"),
+            (["probe", "--prompt", _cp_prompt_path, "--out"], "REFUSE: --out without value"),
+        ]
+        ok_a = True
+        for _argv, _want in _cp_refusals:
+            _ca, _oa, _ta, _ka, _ha = run_rig(_cp_rig, lambda p, req: {}, argv=_argv, env=_cp_env)
+            ok_a = ok_a and _ca == 2 and _want in _oa and not _ka
+
+        # fire b: no seat_url in the chain -> rc2 named, zero doors; a corrupt
+        # local.json is skipped (never a crash) and the chain falls through to the
+        # same named refusal
+        _cb, _ob, _tb, _kb, _hb = run_rig(_cp_rig_bare, lambda p, req: {},
+                                          argv=["probe", "--prompt", _cp_prompt_path], env=_cp_env)
+        open(os.path.join(_cp_kit_bare, "local.json"), "w", encoding="utf-8").write("{corrupt")
+        _cb2, _ob2, _tb2, _kb2, _hb2 = run_rig(_cp_rig_bare, lambda p, req: {},
+                                               argv=["probe", "--prompt", _cp_prompt_path], env=_cp_env)
+        ok_b = (_cb == 2 and "REFUSE: no seat_url in config chain" in _ob and not _kb
+                and _cb2 == 2 and "REFUSE: no seat_url in config chain" in _ob2 and not _kb2
+                and "Traceback" not in _ob2 and "HARNESS-EXC" not in _ob2)
+
+        # fire c: green draw -> rc0, raw keep-first file at the DEFAULT out (beside
+        # the scratch prompt), draw+stamp printed, bare-base door-path appended,
+        # stub-received body carries the floor + the fixture prompt + the pinned model
+        _cc, _oc, _tc, _kc, _hc = run_rig(_cp_rig, _cp_router(_cp_ans),
+                                          argv=["probe", "--prompt", _cp_prompt_path, "--draw", "g1"], env=_cp_env)
+        _cp_craw = _cp_raw(os.path.join(_cp_scr, "census"), "g1")
+        ok_c = (_cc == 0 and "draw=g1 ok=True stamp=" in _oc and "TEXT: " + _cp_ans[:300] in _oc
+                and _cp_craw["draw"] == "g1" and _cp_craw["result"]["ok"] is True
+                and _cp_craw["result"]["text"] == _cp_ans
+                and _cp_craw["seat"] == "http://127.0.0.1:9" and _cp_craw["maxtok_floor"] == 131072
+                and re.fullmatch(r"\d{8}T\d{6}Z", _cp_craw["stamp"])
+                and _kc == ["/v1/chat/completions"]
+                and _cp_bodies[-1]["max_tokens"] >= 131072
+                and _cp_bodies[-1]["messages"][0]["content"] == _cp_prompt
+                and _cp_bodies[-1]["model"] == "stub-seat"
+                and "test-secret" not in _oc)
+
+        # fire c2: full-path seat_url -> endpoint NOT double-appended
+        _cc2, _oc2, _tc2, _kc2, _hc2 = run_rig(_cp_rig_full, _cp_router(_cp_ans),
+                                               argv=["probe", "--prompt", _cp_prompt_path, "--draw", "g2",
+                                                     "--out", os.path.join(_cp_scr, "out-c2")], env=_cp_env)
+        ok_c2 = (_cc2 == 0 and _kc2 == ["/v1/chat/completions"])
+
+        # fire c3: env-wins chain (no usable config file anywhere) -> green, env model rides
+        _cc3, _oc3, _tc3, _kc3, _hc3 = run_rig(_cp_rig_bare, _cp_router(_cp_ans),
+                                               argv=["probe", "--prompt", _cp_prompt_path, "--draw", "g3",
+                                                     "--out", os.path.join(_cp_scr, "out-c3")],
+                                               env={"ORGANS_SEAT_URL": "http://127.0.0.1:9", "ORGANS_SEAT_MODEL": "env-seat"})
+        ok_c3 = (_cc3 == 0 and _kc3 == ["/v1/chat/completions"] and _cp_bodies[-1]["model"] == "env-seat")
+
+        # fire d: door shells -> ok:false door_shell in the raw record, rc3, no crash
+        _cp_d_out = os.path.join(_cp_scr, "out-d")
+        def _cp_nonjson(p, req):
+            _cp_bodies.append(json.loads(req.data.decode("utf-8")))
+            return b"<html>302 shell -- not json</html>"
+        _cd, _od, _td, _kd, _hd = run_rig(_cp_rig, _cp_nonjson,
+                                          argv=["probe", "--prompt", _cp_prompt_path, "--draw", "d1", "--out", _cp_d_out], env=_cp_env)
+        _cp_draw = _cp_raw(_cp_d_out, "d1")
+        ok_d = (_cd == 3 and "ok=False" in _od and _cp_draw["result"]["ok"] is False
+                and _cp_draw["result"]["door_shell"].startswith("<html>302 shell")
+                and "Traceback" not in _od and "HARNESS-EXC" not in _od and _kd == ["/v1/chat/completions"])
+        _cd2, _od2, _td2, _kd2, _hd2 = run_rig(_cp_rig, lambda p, req: {"no_choices": True},
+                                               argv=["probe", "--prompt", _cp_prompt_path, "--draw", "d2", "--out", _cp_d_out], env=_cp_env)
+        _cd3, _od3, _td3, _kd3, _hd3 = run_rig(_cp_rig, lambda p, req: {"choices": []},
+                                               argv=["probe", "--prompt", _cp_prompt_path, "--draw", "d3", "--out", _cp_d_out], env=_cp_env)
+        ok_d2 = (_cd2 == 3 and _cp_raw(_cp_d_out, "d2")["result"].get("door_shell") == '{"no_choices": true}'
+                 and _cd3 == 3 and _cp_raw(_cp_d_out, "d3")["result"].get("door_shell") == '{"choices": []}'
+                 and "Traceback" not in _od2 + _od3 and "HARNESS-EXC" not in _od2 + _od3)
+
+        # fire e: HTTPError -> ok:false http code + body excerpt (400 via the harness
+        # tuple; 429 raised INSIDE the router to prove code fidelity + body capture)
+        _cp_e_out = os.path.join(_cp_scr, "out-e")
+        _ce, _oe, _te, _ke, _he = run_rig(_cp_rig, lambda p, req: ("raise", urllib.error.HTTPError),
+                                          argv=["probe", "--prompt", _cp_prompt_path, "--draw", "e1", "--out", _cp_e_out], env=_cp_env)
+        _cp_eraw = _cp_raw(_cp_e_out, "e1")
+        def _cp_429(p, req):
+            raise urllib.error.HTTPError(req.full_url, 429, "Too Many Requests", None, io.BytesIO(b"rate wall body"))
+        _ce2, _oe2, _te2, _ke2, _he2 = run_rig(_cp_rig, _cp_429,
+                                               argv=["probe", "--prompt", _cp_prompt_path, "--draw", "e2", "--out", _cp_e_out], env=_cp_env)
+        _cp_eraw2 = _cp_raw(_cp_e_out, "e2")
+        ok_e = (_ce == 3 and _cp_eraw["result"]["ok"] is False and _cp_eraw["result"]["http"] == 400
+                and _ce2 == 3 and _cp_eraw2["result"]["http"] == 429
+                and "rate wall body" in _cp_eraw2["result"]["body"]
+                and "Traceback" not in _oe + _oe2 and "HARNESS-EXC" not in _oe + _oe2)
+
+        # fire f: other exception -> ok:false error "Type: msg", rc3, no crash
+        _cf, _of, _tf, _kf, _hf = run_rig(_cp_rig, lambda p, req: ("raise", urllib.error.URLError),
+                                          argv=["probe", "--prompt", _cp_prompt_path, "--draw", "f1",
+                                                "--out", os.path.join(_cp_scr, "out-f")], env=_cp_env)
+        _cp_fraw = _cp_raw(os.path.join(_cp_scr, "out-f"), "f1")
+        ok_f = (_cf == 3 and _cp_fraw["result"]["ok"] is False
+                and _cp_fraw["result"]["error"].startswith("URLError:")
+                and "Traceback" not in _of and "HARNESS-EXC" not in _of)
+
+        # fire g: keep-first collision -- freeze the window stamp, pre-seed the raw
+        # path: O_EXCL must refuse NAMED rc2, sentinel bytes intact, no crash
+        _cp_tag = "20261114T000000Z"
+        time.strftime = lambda fmt, *a: _cp_tag
+        _cp_g_out = os.path.join(_cp_scr, "out-g"); os.makedirs(_cp_g_out)
+        _cp_sentinel = '{"first": "copy sentinel"}' + chr(10)
+        _cp_seed = os.path.join(_cp_g_out, "cageprobe-c1-" + _cp_tag + ".json")
+        open(_cp_seed, "w", encoding="utf-8").write(_cp_sentinel)
+        _cg, _og, _tg, _kg, _hg = run_rig(_cp_rig, _cp_router(_cp_ans),
+                                          argv=["probe", "--prompt", _cp_prompt_path, "--draw", "c1", "--out", _cp_g_out], env=_cp_env)
+        time.strftime = _cp_saved_strftime
+        ok_g = (_cg == 2 and "REFUSE: keep-first collision" in _og and "first copy intact" in _og
+                and open(_cp_seed, encoding="utf-8").read() == _cp_sentinel
+                and "Traceback" not in _og and "HARNESS-EXC" not in _og)
+
+        # fire h: the family habit at the seam -- direct probe() with maxtok=2000
+        # (the old family default): the stub must receive the clamped floor budget.
+        _cp_ns = {"__name__": "cage_probe_test", "__file__": _cp_rig}
+        exec(compile(open(_cp_rig, encoding="utf-8").read(), _cp_rig, "exec"), _cp_ns)
+        _cp_h_bodies = []
+        def _cp_stub(req, timeout=None):
+            _cp_h_bodies.append(json.loads(req.data.decode("utf-8")))
+            return FakeResp(json.dumps({"choices": [{"message": {"content": "floor ok"}}]}).encode())
+        _cp_real_urlopen = urllib.request.urlopen
+        urllib.request.urlopen = _cp_stub
+        try:
+            _cp_hres = _cp_ns["probe"]("floor probe", {"seat_url": "http://127.0.0.1:9"}, maxtok=2000)
+            _cp_hres2 = _cp_ns["probe"]("floor probe", {"seat_url": "http://127.0.0.1:9"})
+        finally:
+            urllib.request.urlopen = _cp_real_urlopen
+        ok_h = (_cp_hres["ok"] is True and _cp_hres2["ok"] is True
+                and [b["max_tokens"] for b in _cp_h_bodies] == [131072, 131072])
+
+        _cp_floor_ok = len(_cp_bodies) == 5 and all(b.get("max_tokens", 0) >= 131072 for b in _cp_bodies)
+        record("cage-probe-gates",
+               ok_a and ok_b and ok_c and ok_c2 and ok_c3 and ok_d and ok_d2 and ok_e and ok_f and ok_g and ok_h and _cp_floor_ok,
+               "a=%d b=%d c=%d c2=%d c3=%d d=%d d2=%d e=%d f=%d g=%d h=%d floor=%d bodies=%d"
+               % (ok_a, ok_b, ok_c, ok_c2, ok_c3, ok_d, ok_d2, ok_e, ok_f, ok_g, ok_h, _cp_floor_ok, len(_cp_bodies)))
+    except Exception as e:
+        record("cage-probe-gates", False, "LEG-EXC %s: %s" % (type(e).__name__, e))
+    finally:
+        os.path.expanduser = _cp_saved_expanduser
+        time.strftime = _cp_saved_strftime
+        for k in _cp_envkeys:
+            if _cp_saved_env[k] is None: os.environ.pop(k, None)
+            else: os.environ[k] = _cp_saved_env[k]
+_cage_probe_leg()
 
 # ---------- tts-clip-gates (Tier-2 tts_clip organ: the 21-copy _clip* local-voice family
 # distilled; CPU-only render, magic-byte player dispatch, silent-wav gate IN CODE).
