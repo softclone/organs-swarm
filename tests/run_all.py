@@ -1080,6 +1080,7 @@ MANIFEST_PY = [
     'scripts/inbox_leg.py',
     'scripts/inbox_walk2.py',
     'scripts/mesh_leg.py',
+    'scripts/mirror_audit.py',
     'scripts/molt/b4_taste.py',
     'scripts/molt/batch.py',
     'scripts/molt/gguf_hist.py',
@@ -1230,6 +1231,97 @@ _c9, _o9, _t9, _k9, _h9 = run_rig(_rr, lambda p, req: {}, argv=["--rig", "w"], e
 ok = (_c7 == 0 and "RUN-RIG-DONE (plan)" in _o7 and _c8 == 5 and "REFUSE" in _o8
       and _c9 == 4 and "NO-REGISTRY" in _o9 and not (_k7 or _k8 or _k9))
 record("run-rig-registry-red", ok, f"plan rc{_c7} unknown rc{_c8} noreg rc{_c9}")
+
+# ---------- mirror-audit-gates (Tier-2 mirror_audit organ: the 317-copy _mirror_audit_batch*
+# one-off family distilled; GP719/GP739/GP740 gates IN CODE). Fires at the door through
+# run_rig: synthetic canon trio (**Bar:** piece / NO BAR header piece / plain piece), mocked
+# seat answers valid two-line verdicts plus a garbage one-liner for the designated piece ->
+# GP739 reroll fired BOTH ways (recover: rerolls 1..2 + parsed; cap-out: rerolls=2 +
+# unparsed_final). Bookkeeping asserted per row: gate in {BAR, ACT-ONLY, PLAIN}, rerolls<=2,
+# parsed shape {verdict, reason, bar}. --dry rc0 with COMPUTED counts and ZERO seat calls;
+# no-files REFUSE rc2 (bare rc from SystemExit, never piped). Every seat ask must carry the
+# 131072 max_tokens floor. Loud-named: any leg defect records a NAMED FAIL, never a crash.
+def _mirror_audit_leg():
+    _saved_seat = os.environ.get("ORGANS_SEAT_URL")
+    try:
+        _ma = os.path.join(REPO, "scripts", "mirror_audit.py")
+        _ma_files = {
+            "canon/eros/bar-piece.md": "# bar piece\n\n" + "**Bar:** test-bar\n\nsynthetic body prose for the bar fire\n",
+            "canon/eros/act-piece.md": "# act piece\nNO BAR -- record-only header\n\nsynthetic act body prose\n",
+            "canon/eros/plain-piece.md": "# plain piece\n\nsynthetic plain body prose\n",
+        }
+        _ma_env = {"ORGANS_SEAT_URL": "http://127.0.0.1:9/v1/chat/completions"}
+        _ma_argv = ["--files", "canon/eros/bar-piece.md,canon/eros/act-piece.md,canon/eros/plain-piece.md"]
+        _ma_valid = {
+            "bar-piece.md": "ADMIT BAR_MET\nThe piece clears its declared bar and lands the act on the reader.",
+            "act-piece.md": "ADMIT BAR_NOT_MET\nThe record-only act lands as an act; no bar is claimed here.",
+            "plain-piece.md": "ADMIT\nThe piece lands its act on the reader with a concrete turn.",
+        }
+        _ma_garbage = "canon/eros/plain-piece.md"
+
+        def _ma_router(recover):
+            _seen, _maxtoks = {}, []
+            def _r(p, req):
+                _b = json.loads(req.data.decode("utf-8"))
+                _maxtoks.append(_b.get("max_tokens"))
+                _rel = _b["messages"][0]["content"].split("FILE: ", 1)[1].split("\n", 1)[0]
+                _n = _seen.get(_rel, 0); _seen[_rel] = _n + 1
+                if _rel == _ma_garbage and (_n == 0 or not recover):
+                    _text = "HOLD"  # GP739 red shape: verdict token, no reason sentence
+                else:
+                    _text = _ma_valid[_rel.rsplit("/", 1)[-1]]
+                return {"choices": [{"message": {"content": _text}}]}
+            return _r, _maxtoks
+
+        def _ma_rows(tree):
+            _cf = [k for k in tree if k.startswith("scripts/census/mirror-audit-")]
+            assert len(_cf) == 1, f"census files={_cf}"
+            return json.loads(tree[_cf[0]])
+
+        def _ma_shape(row, gate):
+            return (row.get("gate") == gate and isinstance(row.get("rerolls"), int)
+                    and row["rerolls"] <= 2 and "unparsed_final" in row
+                    and (row["parsed"] is None or set(row["parsed"]) == {"verdict", "reason", "bar"}))
+
+        # fire 1: GP739 reroll RECOVERS (garbage once for the plain piece, then a valid verdict)
+        _r1, _mt1 = _ma_router(recover=True)
+        _c1, _o1, _t1, _k1, _h1 = run_rig(_ma, _r1, files=_ma_files, argv=_ma_argv, env=_ma_env)
+        _rows1 = _ma_rows(_t1)
+        _p1 = _rows1["canon/eros/plain-piece.md"]
+        ok1 = (_c1 == 0 and len(_rows1) == 3 and "STORE:" in _o1 and "unparsed= 0" in _o1
+               and _ma_shape(_rows1["canon/eros/bar-piece.md"], "BAR")
+               and _ma_shape(_rows1["canon/eros/act-piece.md"], "ACT-ONLY")
+               and _ma_shape(_p1, "PLAIN")
+               and 1 <= _p1["rerolls"] <= 2 and _p1["parsed"] is not None
+               and _p1["parsed"]["verdict"] == "ADMIT" and _p1["unparsed_final"] is False
+               and _rows1["canon/eros/bar-piece.md"]["parsed"]["bar"] == "BAR_MET"
+               and len(_k1) == 4 and _mt1 and all(t >= 131072 for t in _mt1))
+        # fire 2: GP739 cap EXHAUSTS (garbage forever -> rerolls=2, parsed None, unparsed_final)
+        _r2, _mt2 = _ma_router(recover=False)
+        _c2, _o2, _t2, _k2, _h2 = run_rig(_ma, _r2, files=_ma_files, argv=_ma_argv, env=_ma_env)
+        _rows2 = _ma_rows(_t2)
+        _p2 = _rows2["canon/eros/plain-piece.md"]
+        ok2 = (_c2 == 0 and "unparsed= 1" in _o2 and _ma_shape(_p2, "PLAIN")
+               and _p2["rerolls"] == 2 and _p2["parsed"] is None and _p2["unparsed_final"] is True
+               and _rows2["canon/eros/bar-piece.md"]["parsed"] is not None
+               and len(_k2) == 5 and _mt2 and all(t >= 131072 for t in _mt2))
+        # fire 3: --dry plan rc0, COMPUTED counts, ZERO seat calls, no census write
+        _c3, _o3, _t3, _k3, _h3 = run_rig(_ma, lambda p, req: {}, files=_ma_files,
+                                          argv=["--glob", "canon/eros/*.md", "--dry"], env=_ma_env)
+        ok3 = (_c3 == 0 and "DRY-PLAN rows= 3 bars= 1 act-only= 1" in _o3 and not _k3
+               and not any(k.startswith("scripts/census/") for k in _t3))
+        # fire 4: no files selected -> bare REFUSE rc2, zero seat calls
+        _c4, _o4, _t4, _k4, _h4 = run_rig(_ma, lambda p, req: {}, files=_ma_files, argv=[], env=_ma_env)
+        ok4 = (_c4 == 2 and "REFUSE: no files" in _o4 and not _k4)
+        record("mirror-audit-gates", ok1 and ok2 and ok3 and ok4,
+               f"reroll rc{_c1} r={_p1.get('rerolls')} capout rc{_c2} r={_p2.get('rerolls')} "
+               f"dry rc{_c3} doors={len(_k3)} refuse rc{_c4} floor={all(t >= 131072 for t in _mt1 + _mt2)}")
+    except Exception as e:
+        record("mirror-audit-gates", False, f"LEG-EXC {type(e).__name__}: {e}")
+    finally:
+        if _saved_seat is None: os.environ.pop("ORGANS_SEAT_URL", None)
+        else: os.environ["ORGANS_SEAT_URL"] = _saved_seat
+_mirror_audit_leg()
 
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")

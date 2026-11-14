@@ -26,7 +26,7 @@ set  ORGANS_HONCHO_URL / ORGANS_EMBED_URL = door bases for mesh_leg/after_restar
 Every `ORGANS_*` value ALSO rides a config file, resolved in order
 `env -> <rig-dir>/local.json -> ~/organs.json` — so bells fire green with an empty environment.
 Config keys (same JSON, any subset): `home`, `secrets`, `shop_dir`, `leg_dir`, `mnemos`,
-`dream_sh`, `seat_url`, `handle`, `ledger`, `jobs`, `bell_firings`, `tz_offset`,
+`dream_sh`, `seat_url`, `seat_model` (mirror_audit seat model name; portable default `local-seat`), `handle`, `ledger`, `jobs`, `bell_firings`, `tz_offset`,
 `row_prefix` (cadence counter leg — NO shop identity in the portable default: unset prints
 `COUNTER LEG INERT` advisory and skips; set it to your ledger's row token, e.g. `"C5"`),
 `pipes_extra` (pipes_beat tailnet entries: `[[label, url, expected_status], ...]`),
@@ -62,6 +62,7 @@ the repo ships zero estate paths, ports, names, or row prefixes.
 | `scripts/inbox_leg.py` | inbox lane runner (inbox_* family as one organ): per-bucket door census, banked-gate before ack, lazy per-door secret load, unreadable door = named refusal never a silent zero | `REFUSE: door unreadable` (exit 2); empty door prints `SERVED 0` and exits 0 |
 | `scripts/fire_genre.py` | genre fire runner (_fire_g<N> wrapper family as JSONL data rows): byte-count assert FIRST, dry plan by default, venue write only behind `--fire` | `REFUSE: byte drift in data rows` (exit 2, plan names the dead rows before any door touch) |
 | `scripts/run_rig.py` | registry dispatcher (_run_<rig><n> wrapper family): registry is SHOP config (`ORGANS_RIGS` / HOME/scripts/rigs.json; seed example in the header, never shipped), plan by default, `--fire` executes via runlib | `NO-REGISTRY` (exit 4); `REFUSE: rig <name> not in registry` (exit 5, known names printed) |
+| `scripts/mirror_audit.py` | cold seat audit runner (_mirror_audit_batch* family, 317 one-offs distilled): GP719 bar auto-discover (`**Bar:**` in piece), GP739 parse gate (verdict without a reason sentence = UNPARSED, reroll cap 2, never stores a groundless verdict), GP740 record-only header = ACT-ONLY; max_tokens floor 131072 asserted in ask(); `--dry` plans with ZERO seat calls; model name via `seat_model` config (deployed local.json pins the real seat model) | `REFUSE: no files` (exit 2); `NO-REGISTRY` (exit 4); cap-exhausted rows booked `unparsed_final: true`, unparsed count on the STORE line |
 
 ## Tests
 
