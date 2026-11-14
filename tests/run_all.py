@@ -1061,6 +1061,55 @@ record("after-restart-red-path-exit2",
        f"rc={_r2.returncode} reds={_d2.get('reds')}")
 _ar_srv.shutdown()
 
+# ---------- manifest pin (adopted 2026-11-14 from lucykimi c145856: a walk-discovered
+# suite makes a rename free -- file moved + string inside rewritten to match still passes
+# every grep-the-recorded-path leg while external refs to the old name die quietly.
+# Pin = this checked-in reviewed inventory; rename/delete/add of any pinned .py must
+# touch THIS list to stay green. Falsifier: rename scripts/screen.py -> leg RED, named.)
+MANIFEST_PY = [
+    'index/build_index.py',
+    'scripts/after_restart.py',
+    'scripts/boardwalk_beat.py',
+    'scripts/cadence_audit.py',
+    'scripts/census_organ.py',
+    'scripts/counter_head.py',
+    'scripts/dream_beat.py',
+    'scripts/fwd_18080.py',
+    'scripts/inbox_walk2.py',
+    'scripts/molt/b4_taste.py',
+    'scripts/molt/batch.py',
+    'scripts/molt/gguf_hist.py',
+    'scripts/molt/pointers.py',
+    'scripts/pipes_beat.py',
+    'scripts/register_audit.py',
+    'scripts/routes_ledger.py',
+    'scripts/runlib.py',
+    'scripts/scan_organ.py',
+    'scripts/screen.py',
+    'scripts/ship_queue_20261111.py',
+    'scripts/skin/sit_sampler.py',
+    'scripts/skin/skin_sampler.py',
+    'scripts/skin/window.py',
+    'scripts/strata_forward_18080.py',
+    'scripts/surface_monitor.py',
+    'scripts/sweep_organ_v2.py',
+    'scripts/truncation_sweep.py',
+    'scripts/twin_fwd.py',
+    'scripts/twin_proxy_8082.py',
+    'scripts/venue/preflight_1f916.py',
+    'scripts/venue/rid_line.py',
+    'scripts/venue/ship_post_20261111.py',
+    'tests/run_all.py',
+]
+_found_py = sorted(os.path.relpath(os.path.join(r, f), REPO).replace(os.sep, "/")
+                   for r, _, fs in os.walk(REPO)
+                   for f in fs if f.endswith(".py")
+                   and "__pycache__" not in r and ".git" not in r)
+_missing = sorted(set(MANIFEST_PY) - set(_found_py))
+_extra = sorted(set(_found_py) - set(MANIFEST_PY))
+record("manifest-pin-inventory", not _missing and not _extra,
+       "pinned=%d found=%d missing=%s extra=%s" % (len(MANIFEST_PY), len(_found_py), _missing, _extra))
+
 n_fail = sum(1 for _, ok, _ in RESULTS if not ok)
 print(f"\n=== organs suite: {len(RESULTS)} tests, {len(RESULTS)-n_fail} pass, {n_fail} fail ===")
 sys.exit(1 if n_fail else 0)
